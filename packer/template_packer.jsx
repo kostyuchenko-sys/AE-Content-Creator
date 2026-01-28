@@ -10,6 +10,7 @@
 
 (function () {
     var WIN_TITLE = "Template Packer";
+    var placeholderCounter = 1;
 
     function alertError(msg) {
         alert("Template Packer: " + msg);
@@ -39,10 +40,14 @@
         return null;
     }
 
-    function addPlaceholderMarker(layer, index) {
+    function addPlaceholderMarker(layer, index, label) {
         var markerProp = layer.property("Marker");
         if (!markerProp) return;
-        var mv = new MarkerValue("PH:" + index);
+        var comment = "PH:" + index;
+        if (label && label.length) {
+            comment += "_" + label;
+        }
+        var mv = new MarkerValue(comment);
         markerProp.setValueAtTime(layer.inPoint, mv);
     }
 
@@ -51,9 +56,19 @@
         if (!markerProp || markerProp.numKeys < 1) return null;
         var mv = markerProp.keyValue(1);
         if (!mv || !mv.comment) return null;
-        var match = /^PH:(\d+)/.exec(mv.comment);
+        var match = /^PH:(\d+)(?:_(.*))?/.exec(mv.comment);
         if (!match) return null;
         return parseInt(match[1], 10);
+    }
+
+    function parsePlaceholderLabel(layer) {
+        var markerProp = layer.property("Marker");
+        if (!markerProp || markerProp.numKeys < 1) return "";
+        var mv = markerProp.keyValue(1);
+        if (!mv || !mv.comment) return "";
+        var match = /^PH:(\d+)(?:_(.*))?/.exec(mv.comment);
+        if (!match) return "";
+        return match[2] || "";
     }
 
     function detectPlaceholderType(layer) {
@@ -114,20 +129,71 @@
         }
     }
 
+    function collectAssets(packageFolder) {
+        try {
+            var assetsFolder = new Folder(packageFolder.fsName + "/assets");
+            if (!assetsFolder.exists) {
+                assetsFolder.create();
+            }
+
+            if (app.project.collectFiles) {
+                app.project.collectFiles(assetsFolder);
+                return;
+            }
+
+            // Fallback: manual copy (without relink)
+            for (var i = 1; i <= app.project.numItems; i++) {
+                var it = app.project.item(i);
+                if (it instanceof FootageItem && it.file) {
+                    try {
+                        var dst = new File(assetsFolder.fsName + "/" + it.file.name);
+                        it.file.copy(dst);
+                    } catch (e1) {}
+                }
+            }
+        } catch (e2) {
+            alertError("Collect assets failed: " + e2.toString());
+        }
+    }
+
     function collectPlaceholders(comp) {
         var list = [];
-        for (var i = 1; i <= comp.numLayers; i++) {
-            var layer = comp.layer(i);
-            if (!layer || !layer.source) continue;
-            var idx = parsePlaceholderIndex(layer);
-            if (idx === null || isNaN(idx)) continue;
-            list.push({
-                index: idx,
-                label: layer.name,
-                type: detectPlaceholderType(layer),
-                layerRef: "Layer " + i
-            });
+        var visited = [];
+
+        function alreadyVisited(target) {
+            for (var v = 0; v < visited.length; v++) {
+                if (visited[v] === target) return true;
+            }
+            visited.push(target);
+            return false;
         }
+
+        function walk(targetComp) {
+            if (!targetComp || !(targetComp instanceof CompItem)) return;
+            if (alreadyVisited(targetComp)) return;
+
+            for (var i = 1; i <= targetComp.numLayers; i++) {
+                var layer = targetComp.layer(i);
+                if (!layer) continue;
+
+                var idx = parsePlaceholderIndex(layer);
+                if (idx !== null && !isNaN(idx)) {
+                    var label = parsePlaceholderLabel(layer);
+                    list.push({
+                        index: idx,
+                        label: label && label.length ? label : layer.name,
+                        type: detectPlaceholderType(layer),
+                        layerRef: targetComp.name + " : Layer " + i
+                    });
+                }
+
+                if (layer.source instanceof CompItem) {
+                    walk(layer.source);
+                }
+            }
+        }
+
+        walk(comp);
         list.sort(function (a, b) { return a.index - b.index; });
         return list;
     }
@@ -180,8 +246,23 @@
         groupActions.orientation = "column";
         groupActions.alignChildren = ["fill", "top"];
 
+        var counterRow = groupActions.add("group");
+        counterRow.add("statictext", undefined, "Counter:");
+        var counterInput = counterRow.add("edittext", undefined, String(placeholderCounter));
+        counterInput.characters = 6;
+        var resetBtn = counterRow.add("button", undefined, "Reset");
+
+        var reduceRow = groupActions.add("group");
+        var reduceCheckbox = reduceRow.add("checkbox", undefined, "Reduce project + collect assets");
+        reduceCheckbox.value = true;
+
         var markBtn = groupActions.add("button", undefined, "Mark placeholders (selected layers)");
         var buildBtn = groupActions.add("button", undefined, "Build package");
+
+        resetBtn.onClick = function () {
+            placeholderCounter = 1;
+            counterInput.text = "1";
+        };
 
         markBtn.onClick = function () {
             var comp = getActiveComp();
@@ -195,9 +276,16 @@
                 return;
             }
             app.beginUndoGroup("Mark Placeholders");
-            for (var i = 0; i < sel.length; i++) {
-                addPlaceholderMarker(sel[i], i + 1);
+            var startIdx = parseInt(counterInput.text, 10);
+            if (isNaN(startIdx) || startIdx <= 0) {
+                startIdx = placeholderCounter;
             }
+            for (var i = 0; i < sel.length; i++) {
+                var idx = startIdx + i;
+                addPlaceholderMarker(sel[i], idx, sel[i].name);
+            }
+            placeholderCounter = startIdx + sel.length;
+            counterInput.text = String(placeholderCounter);
             app.endUndoGroup();
             alert("Marked " + sel.length + " layers as placeholders.");
         };
@@ -243,6 +331,14 @@
                 return;
             }
 
+            if (reduceCheckbox.value) {
+                try {
+                    app.project.reduceProject();
+                } catch (eReduce) {
+                    alertError("Reduce project failed: " + eReduce.toString());
+                }
+            }
+
             // Render preview
             var previewFile = new File(packageFolder.fsName + "/preview.mp4");
             renderPreview(comp, previewFile);
@@ -250,6 +346,10 @@
             // Save project copy
             var projectFile = new File(packageFolder.fsName + "/project.aep");
             proj.save(projectFile);
+
+            if (reduceCheckbox.value) {
+                collectAssets(packageFolder);
+            }
 
             var templateJson = buildTemplateJson(
                 templateId,

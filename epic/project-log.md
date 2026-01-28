@@ -77,6 +77,9 @@
 - **2026-01-28** — **feature** — PoC и первая панель для AE Template Constructor  
   - **Details**: Реализован PoC-скрипт `ae-scripts/replace_placeholders_poc.jsx` (замена плейсхолдеров `PH*` в comp и pre-comp’ах по выделенным футажам) и создана минимальная CEP-панель `AE Content Constructor` (`extension/cep/AEContentConstructor`) с кнопкой `Build from selection`. После исправления манифеста и добавления CSInterface.js панель успешно отображается в AE. После фиксов загрузки шаблонов и встраивания JSX-кода панель полностью функциональна: загружает шаблоны из JSON, позволяет выбирать их и создаёт композиции с заменёнными плейсхолдерами.
   - **Links**: репозиторий `AE-Content-Creator`, epic `epic/ae-template-constructor.md`, `CEP_SETUP.md`.
+- **2026-01-28** — **feature** — Пакетизация шаблонов и UI с карточками  
+  - **Details**: Добавлен `packer/template_packer.jsx` для сборки пакетов шаблонов (template.json + preview + project.aep) и переработан UI панели: карточки шаблонов с превью и динамические слоты подстановки, поддержка локального репозитория шаблонов.
+  - **Links**: `packer/template_packer.jsx`, `packer/README.md`, `extension/cep/AEContentConstructor/host.js`.
 
 ---
 

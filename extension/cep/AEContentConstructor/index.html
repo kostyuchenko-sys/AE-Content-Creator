@@ -98,6 +98,109 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
+
+      .settingsRow {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .pathInput {
+        flex: 1;
+        padding: 6px 8px;
+        border-radius: 4px;
+        border: 1px solid #444;
+        background: #2b2b2b;
+        color: #f3f3f3;
+        font-size: 11px;
+      }
+
+      .templatesGrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 10px;
+      }
+
+      .templateCard {
+        border: 1px solid #333;
+        border-radius: 6px;
+        overflow: hidden;
+        background: #1f1f1f;
+        cursor: pointer;
+        transition: border-color 0.2s, transform 0.1s;
+      }
+
+      .templateCard:hover {
+        border-color: #007aff;
+      }
+
+      .templateCard.selected {
+        border-color: #4095ff;
+        box-shadow: 0 0 0 1px #4095ff inset;
+      }
+
+      .templatePreview {
+        width: 100%;
+        height: 90px;
+        background: #2a2a2a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #777;
+        font-size: 10px;
+      }
+
+      .templateBody {
+        padding: 8px;
+      }
+
+      .templateName {
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .templateDesc {
+        font-size: 10px;
+        color: #aaa;
+        line-height: 1.3;
+        max-height: 36px;
+        overflow: hidden;
+      }
+
+      .slotsContainer {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 8px;
+      }
+
+      .slotCard {
+        border: 1px dashed #444;
+        border-radius: 6px;
+        padding: 8px;
+        background: #232323;
+        font-size: 10px;
+      }
+
+      .slotTitle {
+        font-size: 10px;
+        color: #bbb;
+        margin-bottom: 6px;
+      }
+
+      .slotDrop {
+        border: 1px dashed #555;
+        border-radius: 4px;
+        padding: 10px;
+        text-align: center;
+        color: #888;
+        cursor: pointer;
+      }
+
+      .slotDrop.dragOver {
+        border-color: #007aff;
+        color: #f3f3f3;
+      }
     </style>
     <script src="CSInterface.js"></script>
     <script src="host.js"></script>
@@ -106,15 +209,30 @@
     <div class="root">
       <div class="title">AE Content Constructor</div>
       <div class="description">
-        Перетащи файлы сюда или выдели футажи в Project-панели, выбери шаблон и
-        нажми кнопку ниже.
+        Выбери шаблон, подставь футажи в слоты или выдели их в Project-панели,
+        затем нажми кнопку сборки.
       </div>
+
+      <div class="settingsRow">
+        <input
+          class="pathInput"
+          id="repoPathInput"
+          placeholder="Путь к локальному репозиторию шаблонов"
+        />
+        <button id="reloadTemplatesBtn">Load</button>
+      </div>
+
+      <div class="templatesGrid" id="templatesGrid"></div>
+
+      <div class="description">Слоты подстановки</div>
+      <div class="slotsContainer" id="slotsContainer"></div>
+
       <div class="dropZone" id="dropZone">
         Перетащи файлы сюда<br />
         <span style="font-size: 10px; color: #666;">или используй выделение в Project</span>
         <div class="footageList" id="footageList"></div>
       </div>
-      <select id="templateSelect"></select>
+
       <button id="buildBtn">Build from selection</button>
       <div class="status" id="status">Готово.</div>
     </div>

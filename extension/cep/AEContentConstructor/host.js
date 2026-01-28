@@ -100,11 +100,117 @@
     populateTemplateSelect(defaultTemplate);
   }
 
+  var droppedFiles = [];
+
+  function updateFootageList() {
+    var listEl = document.getElementById("footageList");
+    if (!listEl) return;
+
+    if (droppedFiles.length === 0) {
+      listEl.innerHTML = "";
+      return;
+    }
+
+    var html = "<div style='color: #007aff; margin-bottom: 4px;'>Загружено: " + droppedFiles.length + "</div>";
+    droppedFiles.forEach(function (file, idx) {
+      var name = file.name || file.path || "File " + (idx + 1);
+      html += "<div class='footageItem'>" + name + "</div>";
+    });
+    listEl.innerHTML = html;
+  }
+
+  function setupDragAndDrop() {
+    var dropZone = document.getElementById("dropZone");
+    if (!dropZone) return;
+
+    dropZone.addEventListener("dragover", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.add("dragOver");
+    });
+
+    dropZone.addEventListener("dragleave", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove("dragOver");
+    });
+
+    dropZone.addEventListener("drop", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove("dragOver");
+
+      var files = e.dataTransfer.files;
+      if (!files || files.length === 0) return;
+
+      droppedFiles = [];
+      var filePaths = [];
+
+      for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+        var path = file.path || file.name;
+        if (path) {
+          droppedFiles.push({ name: file.name, path: path });
+          filePaths.push(path);
+        }
+      }
+
+      if (filePaths.length === 0) {
+        setStatus("Не удалось получить пути к файлам.");
+        return;
+      }
+
+      setStatus("Импорт " + filePaths.length + " файлов...");
+      updateFootageList();
+
+      // Импортируем файлы в AE через JSX
+      var cs = getCSInterface();
+      if (!cs) {
+        setStatus("CSInterface недоступен.");
+        return;
+      }
+
+      var importCode = '(function() {' +
+        'var proj = app.project;' +
+        'if (!proj) return "Проект не найден";' +
+        'var importedItems = [];' +
+        'var paths = ' + JSON.stringify(filePaths) + ';' +
+        'for (var i = 0; i < paths.length; i++) {' +
+        '  try {' +
+        '    var file = new File(paths[i]);' +
+        '    if (file.exists) {' +
+        '      var item = proj.importFile(new ImportOptions(file));' +
+        '      if (item) importedItems.push(item);' +
+        '    }' +
+        '  } catch(e) {}' +
+        '}' +
+        'if (importedItems.length > 0) {' +
+        '  // Выделяем импортированные элементы' +
+        '  proj.selection = importedItems;' +
+        '  return "Импортировано: " + importedItems.length;' +
+        '}' +
+        'return "Не удалось импортировать файлы";' +
+        '})()';
+
+      cs.evalScript(importCode, function (result) {
+        if (result && typeof result === "string") {
+          setStatus(result);
+          if (result.indexOf("Импортировано") !== -1) {
+            updateFootageList();
+          }
+        } else {
+          setStatus("Файлы обработаны.");
+        }
+      });
+    });
+  }
+
   function init() {
     var btn = document.getElementById("buildBtn");
     if (!btn) return;
 
     loadTemplatesFromExtension();
+    setupDragAndDrop();
 
     btn.addEventListener("click", function () {
       var cs = getCSInterface();

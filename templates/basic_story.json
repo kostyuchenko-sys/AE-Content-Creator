@@ -1,0 +1,27 @@
+{
+  "id": "basic_story",
+  "name": "Basic Story",
+  "description": "Простой сториз-шаблон на базе TEMPLATE_MAIN с PH1/PH2/PH3.",
+  "mainCompName": "TEMPLATE_MAIN",
+  "placeholders": [
+    {
+      "index": 1,
+      "label": "Main video 1",
+      "type": "video",
+      "layerNamePattern": "PH1"
+    },
+    {
+      "index": 2,
+      "label": "Main video 2",
+      "type": "video",
+      "layerNamePattern": "PH2"
+    },
+    {
+      "index": 3,
+      "label": "Main video 3",
+      "type": "video",
+      "layerNamePattern": "PH3"
+    }
+  ]
+}
+

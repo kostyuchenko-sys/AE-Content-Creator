@@ -75,7 +75,7 @@
   - **Details**: Определена структура `project-log` эпика и формат записей, добавлена ссылка из `epic/README.md`.  
   - **Links**: (заполнить позже при появлении репозитория/PR).
 - **2026-01-28** — **feature** — PoC и первая панель для AE Template Constructor  
-  - **Details**: Реализован PoC-скрипт `ae-scripts/replace_placeholders_poc.jsx` (замена плейсхолдеров `PH*` в comp и pre-comp’ах по выделенным футажам) и создана минимальная CEP-панель `AE Content Constructor` (`extension/cep/AEContentConstructor`) с кнопкой `Build from selection`. После исправления манифеста и добавления CSInterface.js панель успешно отображается в AE.
+  - **Details**: Реализован PoC-скрипт `ae-scripts/replace_placeholders_poc.jsx` (замена плейсхолдеров `PH*` в comp и pre-comp’ах по выделенным футажам) и создана минимальная CEP-панель `AE Content Constructor` (`extension/cep/AEContentConstructor`) с кнопкой `Build from selection`. После исправления манифеста и добавления CSInterface.js панель успешно отображается в AE. После фиксов загрузки шаблонов и встраивания JSX-кода панель полностью функциональна: загружает шаблоны из JSON, позволяет выбирать их и создаёт композиции с заменёнными плейсхолдерами.
   - **Links**: репозиторий `AE-Content-Creator`, epic `epic/ae-template-constructor.md`, `CEP_SETUP.md`.
 
 ---

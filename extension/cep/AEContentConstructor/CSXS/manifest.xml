@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExtensionManifest Version="7.0" ExtensionBundleId="com.kostyuchenko.ae.contentconstructor"
+    ExtensionBundleVersion="0.1.0" ExtensionBundleName="AE Content Constructor">
+    <ExtensionList>
+        <Extension Id="com.kostyuchenko.ae.contentconstructor.panel" Version="0.1.0" />
+    </ExtensionList>
+    <ExecutionEnvironment>
+        <HostList>
+            <!-- Поддержка After Effects CC 2018+ (можешь скорректировать версии под себя) -->
+            <Host Name="AEFT" Version="[15.0,99.9]" />
+        </HostList>
+        <LocaleList>
+            <Locale Code="All" />
+        </LocaleList>
+        <RequiredRuntimeList>
+            <RequiredRuntime Name="CSXS" Version="10.0" />
+        </RequiredRuntimeList>
+    </ExecutionEnvironment>
+    <DispatchInfoList>
+        <Extension Id="com.kostyuchenko.ae.contentconstructor.panel">
+            <DispatchInfo>
+                <Resources>
+                    <MainPath>index.html</MainPath>
+                    <ScriptPath>host.js</ScriptPath>
+                    <CEFCommandLine />
+                </Resources>
+                <Lifecycle>
+                    <AutoVisible>true</AutoVisible>
+                </Lifecycle>
+                <UI>
+                    <Type>Panel</Type>
+                    <Menu>AE Content Constructor</Menu>
+                    <Geometry>
+                        <Size>
+                            <Height>300</Height>
+                            <Width>320</Width>
+                        </Size>
+                    </Geometry>
+                </UI>
+            </DispatchInfo>
+        </Extension>
+    </DispatchInfoList>
+</ExtensionManifest>
+

@@ -68,40 +68,94 @@ function duplicateComp(comp) {
 }
 
 /**
+ * Получить индекс плейсхолдера по имени слоя.
+ *
+ * Поддерживаем варианты:
+ * - "PH_1", "PH_2", ...
+ * - "PH1", "PH2", ...
+ * - "PH_1 something", "PH2 copy" и т.п. (берём только первую часть).
+ *
+ * Возвращает 0-based индекс (0 → первый футаж, 1 → второй и т.д.) или -1, если имя не подходит.
+ */
+function getPlaceholderIndexFromName(layerName) {
+    if (typeof layerName !== "string") {
+        return -1;
+    }
+
+    // Берём "PH_1" из "PH_1 whatever"
+    var base = layerName.split(" ")[0];
+    var match = /^PH_?(\d+)/.exec(base);
+    if (!match) {
+        return -1;
+    }
+
+    var num = parseInt(match[1], 10);
+    if (isNaN(num) || num <= 0) {
+        return -1;
+    }
+
+    return num - 1; // PH1 → 0, PH2 → 1, ...
+}
+
+/**
+ * Внутренняя функция: обойти слои композиции (включая pre-comp'ы)
+ * и заменить плейсхолдеры по их индексу (PH1/PH_1 → первый футаж, PH2/PH_2 → второй и т.д.).
+ *
+ * footageItems — массив футажей (FootageItem), индекс которых соответствует номеру PH.
+ * visited — массив уже обработанных композиций (чтобы не уйти в цикл).
+ */
+function _walkCompAndReplace(comp, footageItems, visited) {
+    if (!comp || !(comp instanceof CompItem)) {
+        return;
+    }
+
+    // Защита от зацикливания: не обрабатываем одну и ту же comp дважды.
+    for (var v = 0; v < visited.length; v++) {
+        if (visited[v] === comp) {
+            return;
+        }
+    }
+    visited.push(comp);
+
+    for (var i = 1; i <= comp.numLayers; i++) {
+        var layer = comp.layer(i);
+
+        // Нас интересуют только AVLayer с source (футаж или precomp)
+        if (!(layer instanceof AVLayer) || !layer.source) {
+            continue;
+        }
+
+        // Если это pre-comp — рекурсивно заходим внутрь, прежде чем трогать имя слоя.
+        if (layer.source instanceof CompItem) {
+            _walkCompAndReplace(layer.source, footageItems, visited);
+        }
+
+        // Плейсхолдеры считаем слоями, чье имя соответствует PH1 / PH_1 / PH2 / ...
+        var idx = getPlaceholderIndexFromName(layer.name);
+        if (idx >= 0 && idx < footageItems.length) {
+            var footage = footageItems[idx];
+            if (footage) {
+                layer.replaceSource(footage, false);
+            }
+        }
+    }
+}
+
+/**
  * Заменить источники у слоёв-плейсхолдеров (имя начинается с "PH_")
- * на переданные футажи.
+ * на переданные футажи, включая pre-comp'ы внутри.
  */
 function replacePlaceholdersInComp(comp, footageItems) {
     if (!comp || !(comp instanceof CompItem)) {
         return;
     }
 
-    // Клонируем массив, чтобы не портить оригинал.
-    var queue = footageItems.slice();
-
     app.beginUndoGroup("Replace Placeholders PoC");
 
     try {
-        for (var i = 1; i <= comp.numLayers; i++) {
-            if (queue.length === 0) {
-                break; // Футажи закончились.
-            }
-
-            var layer = comp.layer(i);
-
-            // Нас интересуют только AVLayer с source (футаж или precomp)
-            if (!(layer instanceof AVLayer) || !layer.source) {
-                continue;
-            }
-
-            // Плейсхолдеры считаем слоями, чье имя начинается с "PH_"
-            if (typeof layer.name === "string" && layer.name.indexOf("PH_") === 0) {
-                var footage = queue.shift();
-                layer.replaceSource(footage, false);
-            }
-        }
+        _walkCompAndReplace(comp, footageItems, []);
     } catch (e) {
-        alert("Ошибка при замене плейсхолдеров: " + e.toString());
+        alert("Ошибка при замене плейсхолдеров (с учётом pre-comp'ов): " + e.toString());
     } finally {
         app.endUndoGroup();
     }
@@ -149,8 +203,14 @@ function runReplacePlaceholdersPoC() {
 
     replacePlaceholdersInComp(newComp, footageItems);
 
-    // Сделаем новую comp активной.
-    proj.activeItem = newComp;
+    // Откроем новую comp во viewer'е (activeItem в последних AE read-only).
+    try {
+        if (typeof newComp.openInViewer === "function") {
+            newComp.openInViewer();
+        }
+    } catch (e) {
+        // Если по какой-то причине не удалось — просто игнорируем, комп всё равно создана.
+    }
 
     alert("PoC завершён: создана новая композиция \"" + newComp.name + "\" с подставленными футажами.");
 }

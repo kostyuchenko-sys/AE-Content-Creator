@@ -123,6 +123,17 @@
     var dropZone = document.getElementById("dropZone");
     if (!dropZone) return;
 
+    // ВАЖНО: запрещаем дефолтное поведение браузера (иначе файл "открывается" в панели).
+    // Делаем это глобально, чтобы drop работал всегда.
+    function preventAll(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    window.addEventListener("dragenter", preventAll, false);
+    window.addEventListener("dragover", preventAll, false);
+    window.addEventListener("dragleave", preventAll, false);
+    window.addEventListener("drop", preventAll, false);
+
     dropZone.addEventListener("dragover", function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -140,15 +151,37 @@
       e.stopPropagation();
       dropZone.classList.remove("dragOver");
 
-      var files = e.dataTransfer.files;
-      if (!files || files.length === 0) return;
+      var files = (e.dataTransfer && e.dataTransfer.files) ? e.dataTransfer.files : null;
+      var items = (e.dataTransfer && e.dataTransfer.items) ? e.dataTransfer.items : null;
+
+      // В некоторых сборках CEP `files` может быть пустым, но `items` содержит file-элементы.
+      if ((!files || files.length === 0) && items && items.length) {
+        try {
+          var collected = [];
+          for (var it = 0; it < items.length; it++) {
+            if (items[it].kind === "file") {
+              var f = items[it].getAsFile();
+              if (f) collected.push(f);
+            }
+          }
+          if (collected.length) {
+            files = collected;
+          }
+        } catch (e0) {}
+      }
+
+      if (!files || files.length === 0) {
+        setStatus("Не удалось получить файлы из drop. Попробуй выделение в Project.");
+        return;
+      }
 
       droppedFiles = [];
       var filePaths = [];
 
       for (var i = 0; i < files.length; i++) {
         var file = files[i];
-        var path = file.path || file.name;
+        // В CEP file.path обычно есть; если нет — иногда можно получить file.name, но тогда импорт невозможен.
+        var path = file.path || file.fullPath || file.name;
         if (path) {
           droppedFiles.push({ name: file.name, path: path });
           filePaths.push(path);

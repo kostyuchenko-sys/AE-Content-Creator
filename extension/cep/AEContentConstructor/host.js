@@ -123,17 +123,6 @@
     var dropZone = document.getElementById("dropZone");
     if (!dropZone) return;
 
-    // ВАЖНО: запрещаем дефолтное поведение браузера (иначе файл "открывается" в панели).
-    // Делаем это глобально, чтобы drop работал всегда.
-    function preventAll(e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    window.addEventListener("dragenter", preventAll, false);
-    window.addEventListener("dragover", preventAll, false);
-    window.addEventListener("dragleave", preventAll, false);
-    window.addEventListener("drop", preventAll, false);
-
     dropZone.addEventListener("dragover", function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -151,37 +140,15 @@
       e.stopPropagation();
       dropZone.classList.remove("dragOver");
 
-      var files = (e.dataTransfer && e.dataTransfer.files) ? e.dataTransfer.files : null;
-      var items = (e.dataTransfer && e.dataTransfer.items) ? e.dataTransfer.items : null;
-
-      // В некоторых сборках CEP `files` может быть пустым, но `items` содержит file-элементы.
-      if ((!files || files.length === 0) && items && items.length) {
-        try {
-          var collected = [];
-          for (var it = 0; it < items.length; it++) {
-            if (items[it].kind === "file") {
-              var f = items[it].getAsFile();
-              if (f) collected.push(f);
-            }
-          }
-          if (collected.length) {
-            files = collected;
-          }
-        } catch (e0) {}
-      }
-
-      if (!files || files.length === 0) {
-        setStatus("Не удалось получить файлы из drop. Попробуй выделение в Project.");
-        return;
-      }
+      var files = e.dataTransfer.files;
+      if (!files || files.length === 0) return;
 
       droppedFiles = [];
       var filePaths = [];
 
       for (var i = 0; i < files.length; i++) {
         var file = files[i];
-        // В CEP file.path обычно есть; если нет — иногда можно получить file.name, но тогда импорт невозможен.
-        var path = file.path || file.fullPath || file.name;
+        var path = file.path || file.name;
         if (path) {
           droppedFiles.push({ name: file.name, path: path });
           filePaths.push(path);
@@ -212,31 +179,32 @@
         return path.replace(/\/+/g, "/");
       });
 
-      // ВАЖНО: JSX собираем многострочно (без `//`), иначе комментарий может "съесть" закрывающие скобки.
-      var importCode = [
-        "(function(){",
-        "  var proj = app.project;",
-        "  if (!proj) return 'Проект не найден';",
-        "  var importedItems = [];",
-        "  var paths = " + JSON.stringify(normalizedPaths) + ";",
-        "  for (var i = 0; i < paths.length; i++) {",
-        "    try {",
-        "      var file = new File(paths[i]);",
-        "      if (file.exists) {",
-        "        var importOptions = new ImportOptions(file);",
-        "        try { importOptions.importAs = ImportAsType.FOOTAGE; } catch(e0) {}",
-        "        var item = proj.importFile(importOptions);",
-        "        if (item) importedItems.push(item);",
-        "      }",
-        "    } catch(e) {}",
-        "  }",
-        "  if (importedItems.length > 0) {",
-        "    proj.selection = importedItems;",
-        "    return 'Импортировано: ' + importedItems.length;",
-        "  }",
-        "  return 'Не удалось импортировать файлы';",
-        "})()"
-      ].join(\"\\n\");
+      // Важно: делаем код максимально простым (без IIFE),
+      // чтобы избежать ошибок парсинга в evalScript.
+      var importCode =
+        'try{' +
+        'var proj=app.project;' +
+        'if(!proj){"Проект не найден"}else{' +
+        'var importedItems=[];' +
+        'var paths=' + JSON.stringify(normalizedPaths) + ';' +
+        'for(var i=0;i<paths.length;i++){' +
+        '  try{' +
+        '    var f=new File(paths[i]);' +
+        '    if(f.exists){' +
+        '      var io=new ImportOptions(f);' +
+        '      var it=proj.importFile(io);' +
+        '      if(it) importedItems.push(it);' +
+        '    }' +
+        '  }catch(_e){}' +
+        '}' +
+        'if(importedItems.length>0){' +
+        '  try{proj.selection=importedItems;}catch(_e2){}' +
+        '  "Импортировано: "+importedItems.length;' +
+        '}else{' +
+        '  "Не удалось импортировать файлы";' +
+        '}' +
+        '}' +
+        '}catch(e){"Ошибка импорта: "+e.toString();}';
 
       cs.evalScript(importCode, function (result) {
         if (result && typeof result === "string") {

@@ -175,18 +175,37 @@
         if (path.indexOf("file://") === 0) {
           path = decodeURIComponent(path.substring(7));
         }
+        // Убираем лишние слеши и нормализуем путь
         return path.replace(/\/+/g, "/");
       });
 
-      var extensionRoot = cs.getSystemPath(SystemPath.EXTENSION).replace(/\\/g, "/");
-      var jsxPath = extensionRoot + "/jsx/acc.jsx";
-      var pathsJson = JSON.stringify(normalizedPaths).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      var importCode = '(function() {' +
+        'var proj = app.project;' +
+        'if (!proj) return "Проект не найден";' +
+        'var importedItems = [];' +
+        'var paths = ' + JSON.stringify(normalizedPaths) + ';' +
+        'for (var i = 0; i < paths.length; i++) {' +
+        '  try {' +
+        '    var file = new File(paths[i]);' +
+        '    if (file.exists) {' +
+        '      var importOptions = new ImportOptions(file);' +
+        '      importOptions.importAs = ImportAsType.FOOTAGE;' +
+        '      var item = proj.importFile(importOptions);' +
+        '      if (item) importedItems.push(item);' +
+        '    }' +
+        '  } catch(e) {' +
+        '    // Пропускаем файлы, которые не удалось импортировать' +
+        '  }' +
+        '}' +
+        'if (importedItems.length > 0) {' +
+        '  // Выделяем импортированные элементы' +
+        '  proj.selection = importedItems;' +
+        '  return "Импортировано: " + importedItems.length;' +
+        '}' +
+        'return "Не удалось импортировать файлы";' +
+        '})()';
 
-      var importCall =
-        'try { $.evalFile("' + jsxPath.replace(/"/g, '\\"') + '"); } catch(e) {} ' +
-        'acc_importFiles("' + pathsJson + '");';
-
-      cs.evalScript(importCall, function (result) {
+      cs.evalScript(importCode, function (result) {
         if (result && typeof result === "string") {
           setStatus(result);
           if (result.indexOf("Импортировано") !== -1) {
@@ -218,15 +237,21 @@
 
       setStatus("Запуск сборки (шаблон: " + compName + ")...");
 
-      var extensionRoot = cs.getSystemPath(SystemPath.EXTENSION).replace(/\\/g, "/");
-      var jsxPath = extensionRoot + "/jsx/acc.jsx";
-      var compNameEsc = (compName || "TEMPLATE_MAIN").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      // Надёжный путь: грузим JSX-файл расширения и вызываем функцию.
+      var jsxPath = cs.getSystemPath(SystemPath.EXTENSION) + "/jsx/replace_placeholders_poc.jsx";
+      // AE/ExtendScript ожидает / даже на Windows; на macOS уже /, но нормализуем.
+      jsxPath = jsxPath.replace(/\\/g, "/").replace(/"/g, '\\"');
 
-      var buildCall =
-        'try { $.evalFile("' + jsxPath.replace(/"/g, '\\"') + '"); } catch(e) {} ' +
-        'acc_buildFromSelection("' + compNameEsc + '");';
+      var call = [
+        'try {',
+        '  $.evalFile("' + jsxPath + '");',
+        '  runReplacePlaceholdersPoCWithCompName("' + compName.replace(/"/g, '\\"') + '");',
+        '} catch(e) {',
+        '  "Ошибка: " + e.toString();',
+        '}'
+      ].join("");
 
-      cs.evalScript(buildCall, function (result) {
+      cs.evalScript(call, function (result) {
         if (result && typeof result === "string") {
           if (result.indexOf("Ошибка") !== -1 || result.indexOf("не найден") !== -1 || result.indexOf("Выдели") !== -1) {
             setStatus("Ошибка: " + result);

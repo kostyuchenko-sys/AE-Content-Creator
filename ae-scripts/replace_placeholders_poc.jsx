@@ -162,16 +162,11 @@ function replacePlaceholdersInComp(comp, footageItems) {
 }
 
 /**
- * Основная функция PoC.
+ * Основная функция PoC с поддержкой имени композиции-шаблона.
  *
- * Шаги:
- * 1. Проверяем наличие выделенных футажей.
- * 2. Ищем композицию-шаблон.
- * 3. Дублируем шаблон.
- * 4. Подставляем футажи в слои-плейсхолдеры нового дубликата.
- * 5. Делаем новую comp активной.
+ * Если compName не передан или пустой, используется TEMPLATE_COMP_NAME.
  */
-function runReplacePlaceholdersPoC() {
+function runReplacePlaceholdersPoCWithCompName(compName) {
     var proj = app.project;
     if (!proj) {
         alert("Проект After Effects не найден. Открой проект и попробуй снова.");
@@ -184,11 +179,13 @@ function runReplacePlaceholdersPoC() {
         return;
     }
 
-    var templateComp = findCompByName(TEMPLATE_COMP_NAME);
+    var compNameToUse = compName && compName.length ? compName : TEMPLATE_COMP_NAME;
+
+    var templateComp = findCompByName(compNameToUse);
     if (!templateComp) {
         alert(
             "Не найдена композиция-шаблон с именем \"" +
-                TEMPLATE_COMP_NAME +
+                compNameToUse +
                 "\".\n" +
                 "Создай comp с таким именем и слоями-плейсхолдерами (PH_1, PH_2, ...)."
         );
@@ -215,6 +212,14 @@ function runReplacePlaceholdersPoC() {
     alert("PoC завершён: создана новая композиция \"" + newComp.name + "\" с подставленными футажами.");
 }
 
-// Точка входа: можно вызывать runReplacePlaceholdersPoC() напрямую из панели или из меню скриптов.
+/**
+ * Обёртка по умолчанию для обратной совместимости.
+ * Можно вызывать runReplacePlaceholdersPoC() без параметров.
+ */
+function runReplacePlaceholdersPoC() {
+    runReplacePlaceholdersPoCWithCompName(TEMPLATE_COMP_NAME);
+}
+
+// Точка входа по умолчанию (для запуска из меню скриптов).
 runReplacePlaceholdersPoC();
 

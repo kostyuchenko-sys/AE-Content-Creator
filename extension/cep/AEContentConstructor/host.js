@@ -44,53 +44,60 @@
   }
 
   function loadTemplatesFromExtension() {
+    // Всегда показываем хотя бы дефолтный шаблон
+    var defaultTemplate = [
+      { id: "basic_story", name: "Basic Story", mainCompName: "TEMPLATE_MAIN" }
+    ];
+
     var cs = getCSInterface();
-    if (!cs || typeof window.cep === "undefined" || !window.cep.fs) {
-      setStatus("CEP FS недоступен, используем шаблон по умолчанию (TEMPLATE_MAIN).");
-      populateTemplateSelect([
-        { id: "basic_story", name: "Basic Story", mainCompName: "TEMPLATE_MAIN" }
-      ]);
+    if (!cs) {
+      setStatus("CSInterface недоступен, используем шаблон по умолчанию.");
+      populateTemplateSelect(defaultTemplate);
       return;
     }
 
-    var fs = window.cep.fs;
-    var extensionRoot = cs.getSystemPath(SystemPath.EXTENSION);
-    var templatesDir = extensionRoot + "/templates";
-
-    var dirResult = fs.readdir(templatesDir);
-    if (dirResult.err) {
-      setStatus("Не удалось прочитать templates, используем дефолтный шаблон.");
-      populateTemplateSelect([
-        { id: "basic_story", name: "Basic Story", mainCompName: "TEMPLATE_MAIN" }
-      ]);
-      return;
-    }
-
-    var files = dirResult.data || [];
-    var templates = [];
-
-    files.forEach(function (fileName) {
-      if (!/\.json$/i.test(fileName)) return;
-      var filePath = templatesDir + "/" + fileName;
-      var fileResult = fs.readFile(filePath);
-      if (fileResult.err) return;
+    // Пробуем загрузить через CEP FS
+    if (typeof window.cep !== "undefined" && window.cep.fs) {
       try {
-        var tpl = JSON.parse(fileResult.data || "{}");
-        if (tpl && (tpl.mainCompName || tpl.id)) {
-          templates.push(tpl);
+        var fs = window.cep.fs;
+        var extensionRoot = cs.getSystemPath(SystemPath.EXTENSION);
+        var templatesDir = extensionRoot + "/templates";
+
+        var dirResult = fs.readdir(templatesDir);
+        if (!dirResult.err && dirResult.data) {
+          var files = dirResult.data || [];
+          var templates = [];
+
+          files.forEach(function (fileName) {
+            if (!/\.json$/i.test(fileName)) return;
+            var filePath = templatesDir + "/" + fileName;
+            var fileResult = fs.readFile(filePath);
+            if (!fileResult.err && fileResult.data) {
+              try {
+                var tpl = JSON.parse(fileResult.data);
+                if (tpl && (tpl.mainCompName || tpl.id)) {
+                  templates.push(tpl);
+                }
+              } catch (e) {
+                console.error("Failed to parse template JSON:", fileName, e);
+              }
+            }
+          });
+
+          if (templates.length > 0) {
+            populateTemplateSelect(templates);
+            setStatus("Загружено шаблонов: " + templates.length);
+            return;
+          }
         }
       } catch (e) {
-        // Пропускаем битые JSON.
+        console.error("Error loading templates:", e);
       }
-    });
-
-    if (!templates.length) {
-      populateTemplateSelect([
-        { id: "basic_story", name: "Basic Story", mainCompName: "TEMPLATE_MAIN" }
-      ]);
-    } else {
-      populateTemplateSelect(templates);
     }
+
+    // Fallback на дефолтный шаблон
+    setStatus("Используем шаблон по умолчанию.");
+    populateTemplateSelect(defaultTemplate);
   }
 
   function init() {
@@ -107,24 +114,83 @@
       }
 
       var select = document.getElementById("templateSelect");
-      var compName = select && select.value ? select.value : "";
+      var compName = select && select.value ? select.value : "TEMPLATE_MAIN";
 
-      setStatus(
-        "Запуск сборки из выделенных футажей"
-          + (compName ? " (шаблон: " + compName + ")" : "")
-          + "..."
-      );
+      setStatus("Запуск сборки (шаблон: " + compName + ")...");
 
-      // Вызываем нашу функцию из JSX-скрипта в контексте AE.
-      // Предполагается, что `replace_placeholders_poc.jsx` уже загружен / подключен.
-      var jsxCall =
-        compName && compName.length
-          ? 'runReplacePlaceholdersPoCWithCompName("' + compName.replace(/"/g, '\\"') + '")'
-          : "runReplacePlaceholdersPoC()";
+      // Встроенный JSX-код для замены плейсхолдеров
+      var jsxCode = '(function() {' +
+        'function getSelectedFootageItems() {' +
+        '  var proj = app.project;' +
+        '  if (!proj) return [];' +
+        '  var items = proj.selection;' +
+        '  var result = [];' +
+        '  for (var i = 0; i < items.length; i++) {' +
+        '    if (items[i] instanceof FootageItem) result.push(items[i]);' +
+        '  }' +
+        '  return result;' +
+        '}' +
+        'function findCompByName(name) {' +
+        '  var proj = app.project;' +
+        '  if (!proj) return null;' +
+        '  for (var i = 1; i <= proj.numItems; i++) {' +
+        '    var item = proj.item(i);' +
+        '    if (item instanceof CompItem && item.name === name) return item;' +
+        '  }' +
+        '  return null;' +
+        '}' +
+        'function getPlaceholderIndexFromName(layerName) {' +
+        '  if (typeof layerName !== "string") return -1;' +
+        '  var base = layerName.split(" ")[0];' +
+        '  var match = /^PH_?(\\d+)/.exec(base);' +
+        '  if (!match) return -1;' +
+        '  var num = parseInt(match[1], 10);' +
+        '  return (isNaN(num) || num <= 0) ? -1 : num - 1;' +
+        '}' +
+        'function _walkCompAndReplace(comp, footageItems, visited) {' +
+        '  if (!comp || !(comp instanceof CompItem)) return;' +
+        '  for (var v = 0; v < visited.length; v++) {' +
+        '    if (visited[v] === comp) return;' +
+        '  }' +
+        '  visited.push(comp);' +
+        '  for (var i = 1; i <= comp.numLayers; i++) {' +
+        '    var layer = comp.layer(i);' +
+        '    if (!(layer instanceof AVLayer) || !layer.source) continue;' +
+        '    if (layer.source instanceof CompItem) {' +
+        '      _walkCompAndReplace(layer.source, footageItems, visited);' +
+        '    }' +
+        '    var idx = getPlaceholderIndexFromName(layer.name);' +
+        '    if (idx >= 0 && idx < footageItems.length && footageItems[idx]) {' +
+        '      layer.replaceSource(footageItems[idx], false);' +
+        '    }' +
+        '  }' +
+        '}' +
+        'var proj = app.project;' +
+        'if (!proj) return "Проект не найден";' +
+        'var footageItems = getSelectedFootageItems();' +
+        'if (footageItems.length === 0) return "Выдели футажи в Project";' +
+        'var templateComp = findCompByName("' + compName.replace(/"/g, '\\"') + '");' +
+        'if (!templateComp) return "Не найден шаблон: ' + compName.replace(/"/g, '\\"') + '";' +
+        'var newComp = templateComp.duplicate();' +
+        'if (!newComp) return "Не удалось создать дубликат";' +
+        'app.beginUndoGroup("Replace Placeholders");' +
+        'try { _walkCompAndReplace(newComp, footageItems, []); }' +
+        'catch(e) { app.endUndoGroup(); return "Ошибка: " + e.toString(); }' +
+        'app.endUndoGroup();' +
+        'try { if (typeof newComp.openInViewer === "function") newComp.openInViewer(); } catch(e) {}' +
+        'return "Создана композиция: " + newComp.name;' +
+        '})()';
 
-      cs.evalScript(jsxCall, function (result) {
-        // result может быть undefined или строкой из JSX.
-        setStatus("Готово. " + (result || "Композиция обновлена."));
+      cs.evalScript(jsxCode, function (result) {
+        if (result && typeof result === "string") {
+          if (result.indexOf("Ошибка") !== -1 || result.indexOf("не найден") !== -1 || result.indexOf("Выдели") !== -1) {
+            setStatus("Ошибка: " + result);
+          } else {
+            setStatus("Готово. " + result);
+          }
+        } else {
+          setStatus("Готово. Композиция создана.");
+        }
       });
     });
   }

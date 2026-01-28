@@ -179,31 +179,31 @@
         return path.replace(/\/+/g, "/");
       });
 
-      var importCode = '(function() {' +
-        'var proj = app.project;' +
-        'if (!proj) return "Проект не найден";' +
-        'var importedItems = [];' +
-        'var paths = ' + JSON.stringify(normalizedPaths) + ';' +
-        'for (var i = 0; i < paths.length; i++) {' +
-        '  try {' +
-        '    var file = new File(paths[i]);' +
-        '    if (file.exists) {' +
-        '      var importOptions = new ImportOptions(file);' +
-        '      importOptions.importAs = ImportAsType.FOOTAGE;' +
-        '      var item = proj.importFile(importOptions);' +
-        '      if (item) importedItems.push(item);' +
-        '    }' +
-        '  } catch(e) {' +
-        '    // Пропускаем файлы, которые не удалось импортировать' +
-        '  }' +
-        '}' +
-        'if (importedItems.length > 0) {' +
-        '  // Выделяем импортированные элементы' +
-        '  proj.selection = importedItems;' +
-        '  return "Импортировано: " + importedItems.length;' +
-        '}' +
-        'return "Не удалось импортировать файлы";' +
-        '})()';
+      // ВАЖНО: JSX собираем многострочно (без `//`), иначе комментарий может "съесть" закрывающие скобки.
+      var importCode = [
+        "(function(){",
+        "  var proj = app.project;",
+        "  if (!proj) return 'Проект не найден';",
+        "  var importedItems = [];",
+        "  var paths = " + JSON.stringify(normalizedPaths) + ";",
+        "  for (var i = 0; i < paths.length; i++) {",
+        "    try {",
+        "      var file = new File(paths[i]);",
+        "      if (file.exists) {",
+        "        var importOptions = new ImportOptions(file);",
+        "        try { importOptions.importAs = ImportAsType.FOOTAGE; } catch(e0) {}",
+        "        var item = proj.importFile(importOptions);",
+        "        if (item) importedItems.push(item);",
+        "      }",
+        "    } catch(e) {}",
+        "  }",
+        "  if (importedItems.length > 0) {",
+        "    proj.selection = importedItems;",
+        "    return 'Импортировано: ' + importedItems.length;",
+        "  }",
+        "  return 'Не удалось импортировать файлы';",
+        "})()"
+      ].join(\"\\n\");
 
       cs.evalScript(importCode, function (result) {
         if (result && typeof result === "string") {

@@ -1,27 +1,27 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="7.0" ExtensionBundleId="com.kostyuchenko.ae.contentconstructor"
-    ExtensionBundleVersion="0.1.0" ExtensionBundleName="AE Content Constructor">
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<ExtensionManifest Version="9.0" ExtensionBundleId="com.kostyuchenko.ae.contentconstructor"
+    ExtensionBundleVersion="0.1.0" ExtensionBundleName="AE Content Constructor" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <ExtensionList>
         <Extension Id="com.kostyuchenko.ae.contentconstructor.panel" Version="0.1.0" />
     </ExtensionList>
     <ExecutionEnvironment>
         <HostList>
             <!-- Поддержка After Effects CC 2018+ (можешь скорректировать версии под себя) -->
-            <Host Name="AEFT" Version="[15.0,99.9]" />
+            <Host Name="AEFT" Version="[13.0,99.9]" />
         </HostList>
         <LocaleList>
             <Locale Code="All" />
         </LocaleList>
         <RequiredRuntimeList>
-            <RequiredRuntime Name="CSXS" Version="11.0" />
+            <RequiredRuntime Name="CSXS" Version="9.0" />
         </RequiredRuntimeList>
     </ExecutionEnvironment>
     <DispatchInfoList>
         <Extension Id="com.kostyuchenko.ae.contentconstructor.panel">
             <DispatchInfo>
                 <Resources>
-                    <MainPath>index.html</MainPath>
-                    <ScriptPath>host.js</ScriptPath>
+                    <MainPath>./index.html</MainPath>
+                    <ScriptPath>./host.js</ScriptPath>
                     <CEFCommandLine />
                 </Resources>
                 <Lifecycle>

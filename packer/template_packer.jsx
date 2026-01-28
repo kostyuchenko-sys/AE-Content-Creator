@@ -333,7 +333,7 @@
 
             if (reduceCheckbox.value) {
                 try {
-                    app.project.reduceProject();
+                    app.project.reduceProject(comp);
                 } catch (eReduce) {
                     alertError("Reduce project failed: " + eReduce.toString());
                 }

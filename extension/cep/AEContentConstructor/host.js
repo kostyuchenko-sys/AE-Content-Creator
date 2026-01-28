@@ -170,19 +170,32 @@
         return;
       }
 
+      // Конвертируем пути из file:// в обычные пути для macOS
+      var normalizedPaths = filePaths.map(function (path) {
+        if (path.indexOf("file://") === 0) {
+          path = decodeURIComponent(path.substring(7));
+        }
+        // Убираем лишние слеши и нормализуем путь
+        return path.replace(/\/+/g, "/");
+      });
+
       var importCode = '(function() {' +
         'var proj = app.project;' +
         'if (!proj) return "Проект не найден";' +
         'var importedItems = [];' +
-        'var paths = ' + JSON.stringify(filePaths) + ';' +
+        'var paths = ' + JSON.stringify(normalizedPaths) + ';' +
         'for (var i = 0; i < paths.length; i++) {' +
         '  try {' +
         '    var file = new File(paths[i]);' +
         '    if (file.exists) {' +
-        '      var item = proj.importFile(new ImportOptions(file));' +
+        '      var importOptions = new ImportOptions(file);' +
+        '      importOptions.importAs = ImportAsType.FOOTAGE;' +
+        '      var item = proj.importFile(importOptions);' +
         '      if (item) importedItems.push(item);' +
         '    }' +
-        '  } catch(e) {}' +
+        '  } catch(e) {' +
+        '    // Пропускаем файлы, которые не удалось импортировать' +
+        '  }' +
         '}' +
         'if (importedItems.length > 0) {' +
         '  // Выделяем импортированные элементы' +

@@ -80,6 +80,9 @@
 - **2026-01-28** — **feature** — Пакетизация шаблонов и UI с карточками  
   - **Details**: Добавлен `packer/template_packer.jsx` для сборки пакетов шаблонов (template.json + preview + project.aep) и переработан UI панели: карточки шаблонов с превью и динамические слоты подстановки, поддержка локального репозитория шаблонов.
   - **Links**: `packer/template_packer.jsx`, `packer/README.md`, `extension/cep/AEContentConstructor/host.js`.
+- **2026-01-28** — **feature** — UX статусы и валидация слотов в панели  
+  - **Details**: Добавлены цветные статусы (info/success/error), подсветка незаполненных слотов, кнопка очистки слотов и понятные ошибки при отсутствии выбора/футажей.
+  - **Links**: `extension/cep/AEContentConstructor/index.html`, `extension/cep/AEContentConstructor/host.js`.
 
 ---
 

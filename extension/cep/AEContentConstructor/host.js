@@ -9,10 +9,13 @@
     return new CSInterface();
   }
 
-  function setStatus(text) {
+  function setStatus(text, type) {
     var el = document.getElementById("status");
-    if (el) {
-      el.textContent = text;
+    if (!el) return;
+    el.textContent = text;
+    el.classList.remove("error", "success", "info");
+    if (type) {
+      el.classList.add(type);
     }
   }
 
@@ -35,6 +38,7 @@
   var selectedTemplate = null;
   var slotAssignments = {}; // index -> { path, name }
   var droppedFiles = [];
+  var missingSlots = {}; // index -> true
 
   function getRepoPathInput() {
     var el = document.getElementById("repoPathInput");
@@ -168,6 +172,9 @@
       var drop = document.createElement("div");
       drop.className = "slotDrop";
       drop.textContent = slotAssignments[idx] ? slotAssignments[idx].name : "Перетащи файл";
+      if (missingSlots[idx]) {
+        drop.classList.add("missing");
+      }
 
       drop.addEventListener("dragover", function (e) {
         e.preventDefault();
@@ -191,7 +198,9 @@
         var path = normalizePath(file.path || file.name);
         slotAssignments[idx] = { path: path, name: file.name || path };
         drop.textContent = slotAssignments[idx].name;
-        setStatus("Назначен файл для слота " + idx);
+        delete missingSlots[idx];
+        drop.classList.remove("missing");
+        setStatus("Назначен файл для слота " + idx, "success");
       });
 
       card.appendChild(title);
@@ -314,7 +323,7 @@
     selectedTemplate = templates[0] || null;
     renderTemplates();
     renderSlots();
-    setStatus("Шаблонов: " + templates.length);
+    setStatus("Шаблонов: " + templates.length, "info");
   }
 
   function setupDragAndDrop() {
@@ -358,7 +367,7 @@
         return;
       }
 
-      setStatus("Импорт " + filePaths.length + " файлов...");
+      setStatus("Импорт " + filePaths.length + " файлов...", "info");
       updateFootageList();
 
       // Импортируем файлы в AE через JSX (dedupe by fsName)
@@ -406,9 +415,9 @@
 
       cs.evalScript(importCode, function (result) {
         if (result && typeof result === "string") {
-          setStatus(result);
+        setStatus(result, result.indexOf("Ошибка") !== -1 ? "error" : "success");
         } else {
-          setStatus("Файлы обработаны.");
+        setStatus("Файлы обработаны.", "info");
         }
       });
     });
@@ -417,15 +426,20 @@
   function buildFromSelection() {
     var cs = getCSInterface();
     if (!cs) {
-      setStatus("CSInterface недоступен. Запусти панель в After Effects.");
+      setStatus("CSInterface недоступен. Запусти панель в After Effects.", "error");
       return;
     }
 
     var compName = (selectedTemplate && selectedTemplate.mainCompName) || "TEMPLATE_MAIN";
+    if (!selectedTemplate) {
+      setStatus("Шаблон не выбран.", "error");
+      return;
+    }
 
     // Собираем массив путей по слотам (если есть)
     var providedPaths = [];
-    if (selectedTemplate && selectedTemplate.placeholders && selectedTemplate.placeholders.length) {
+    var placeholders = (selectedTemplate && selectedTemplate.placeholders) ? selectedTemplate.placeholders : [];
+    if (placeholders.length) {
       selectedTemplate.placeholders.forEach(function (ph) {
         var idx = ph.index || 0;
         if (slotAssignments[idx] && slotAssignments[idx].path) {
@@ -434,7 +448,28 @@
       });
     }
 
-    setStatus("Запуск сборки (шаблон: " + compName + ")...");
+    // Валидация слотов: если есть частичное заполнение — просим дозаполнить
+    missingSlots = {};
+    var anyAssigned = false;
+    var missingList = [];
+    if (placeholders.length) {
+      placeholders.forEach(function (ph) {
+        var idx = ph.index || 0;
+        if (slotAssignments[idx] && slotAssignments[idx].path) {
+          anyAssigned = true;
+        } else {
+          missingSlots[idx] = true;
+          missingList.push(idx);
+        }
+      });
+    }
+    if (placeholders.length && anyAssigned && missingList.length) {
+      renderSlots();
+      setStatus("Заполни все слоты: " + missingList.join(", "), "error");
+      return;
+    }
+
+    setStatus("Запуск сборки (шаблон: " + compName + ")...", "info");
 
     var jsxCode = '(function(){' +
       'function getSelectedFootageItems(){' +
@@ -499,12 +534,12 @@
     cs.evalScript(jsxCode, function (result) {
       if (result && typeof result === "string") {
         if (result.indexOf("Ошибка") !== -1 || result.indexOf("не найден") !== -1 || result.indexOf("Выдели") !== -1) {
-          setStatus("Ошибка: " + result);
+          setStatus("Ошибка: " + result, "error");
         } else {
-          setStatus("Готово. " + result);
+          setStatus("Готово. " + result, "success");
         }
       } else {
-        setStatus("Готово. Композиция создана.");
+        setStatus("Готово. Композиция создана.", "success");
       }
     });
   }
@@ -512,6 +547,7 @@
   function init() {
     var btn = document.getElementById("buildBtn");
     var reloadBtn = document.getElementById("reloadTemplatesBtn");
+    var clearBtn = document.getElementById("clearSlotsBtn");
     if (!btn) return;
 
     setRepoPathInput(getSavedRepoPath());
@@ -523,6 +559,15 @@
         var path = getRepoPathInput();
         if (path) saveRepoPath(path);
         loadTemplates();
+      });
+    }
+
+    if (clearBtn) {
+      clearBtn.addEventListener("click", function () {
+        slotAssignments = {};
+        missingSlots = {};
+        renderSlots();
+        setStatus("Слоты очищены.", "info");
       });
     }
 

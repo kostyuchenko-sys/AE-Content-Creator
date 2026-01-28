@@ -51,6 +51,18 @@
         color: #9e9e9e;
       }
 
+      .status.error {
+        color: #ff6b6b;
+      }
+
+      .status.success {
+        color: #6bd68b;
+      }
+
+      .status.info {
+        color: #8fb7ff;
+      }
+
       select {
         padding: 4px 6px;
         border-radius: 4px;
@@ -201,6 +213,16 @@
         border-color: #007aff;
         color: #f3f3f3;
       }
+
+      .slotDrop.missing {
+        border-color: #ff6b6b;
+        color: #ffb3b3;
+      }
+
+      .actionsRow {
+        display: flex;
+        gap: 8px;
+      }
     </style>
     <script src="CSInterface.js"></script>
     <script src="host.js"></script>
@@ -233,7 +255,10 @@
         <div class="footageList" id="footageList"></div>
       </div>
 
-      <button id="buildBtn">Build from selection</button>
+      <div class="actionsRow">
+        <button id="buildBtn">Build from selection</button>
+        <button id="clearSlotsBtn">Clear slots</button>
+      </div>
       <div class="status" id="status">Готово.</div>
     </div>
   </body>

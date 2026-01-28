@@ -175,37 +175,18 @@
         if (path.indexOf("file://") === 0) {
           path = decodeURIComponent(path.substring(7));
         }
-        // Убираем лишние слеши и нормализуем путь
         return path.replace(/\/+/g, "/");
       });
 
-      var importCode = '(function() {' +
-        'var proj = app.project;' +
-        'if (!proj) return "Проект не найден";' +
-        'var importedItems = [];' +
-        'var paths = ' + JSON.stringify(normalizedPaths) + ';' +
-        'for (var i = 0; i < paths.length; i++) {' +
-        '  try {' +
-        '    var file = new File(paths[i]);' +
-        '    if (file.exists) {' +
-        '      var importOptions = new ImportOptions(file);' +
-        '      importOptions.importAs = ImportAsType.FOOTAGE;' +
-        '      var item = proj.importFile(importOptions);' +
-        '      if (item) importedItems.push(item);' +
-        '    }' +
-        '  } catch(e) {' +
-        '    // Пропускаем файлы, которые не удалось импортировать' +
-        '  }' +
-        '}' +
-        'if (importedItems.length > 0) {' +
-        '  // Выделяем импортированные элементы' +
-        '  proj.selection = importedItems;' +
-        '  return "Импортировано: " + importedItems.length;' +
-        '}' +
-        'return "Не удалось импортировать файлы";' +
-        '})()';
+      var extensionRoot = cs.getSystemPath(SystemPath.EXTENSION).replace(/\\/g, "/");
+      var jsxPath = extensionRoot + "/jsx/acc.jsx";
+      var pathsJson = JSON.stringify(normalizedPaths).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
-      cs.evalScript(importCode, function (result) {
+      var importCall =
+        'try { $.evalFile("' + jsxPath.replace(/"/g, '\\"') + '"); } catch(e) {} ' +
+        'acc_importFiles("' + pathsJson + '");';
+
+      cs.evalScript(importCall, function (result) {
         if (result && typeof result === "string") {
           setStatus(result);
           if (result.indexOf("Импортировано") !== -1) {
@@ -237,70 +218,15 @@
 
       setStatus("Запуск сборки (шаблон: " + compName + ")...");
 
-      // Встроенный JSX-код для замены плейсхолдеров
-      var jsxCode = '(function() {' +
-        'function getSelectedFootageItems() {' +
-        '  var proj = app.project;' +
-        '  if (!proj) return [];' +
-        '  var items = proj.selection;' +
-        '  var result = [];' +
-        '  for (var i = 0; i < items.length; i++) {' +
-        '    if (items[i] instanceof FootageItem) result.push(items[i]);' +
-        '  }' +
-        '  return result;' +
-        '}' +
-        'function findCompByName(name) {' +
-        '  var proj = app.project;' +
-        '  if (!proj) return null;' +
-        '  for (var i = 1; i <= proj.numItems; i++) {' +
-        '    var item = proj.item(i);' +
-        '    if (item instanceof CompItem && item.name === name) return item;' +
-        '  }' +
-        '  return null;' +
-        '}' +
-        'function getPlaceholderIndexFromName(layerName) {' +
-        '  if (typeof layerName !== "string") return -1;' +
-        '  var base = layerName.split(" ")[0];' +
-        '  var match = /^PH_?(\\d+)/.exec(base);' +
-        '  if (!match) return -1;' +
-        '  var num = parseInt(match[1], 10);' +
-        '  return (isNaN(num) || num <= 0) ? -1 : num - 1;' +
-        '}' +
-        'function _walkCompAndReplace(comp, footageItems, visited) {' +
-        '  if (!comp || !(comp instanceof CompItem)) return;' +
-        '  for (var v = 0; v < visited.length; v++) {' +
-        '    if (visited[v] === comp) return;' +
-        '  }' +
-        '  visited.push(comp);' +
-        '  for (var i = 1; i <= comp.numLayers; i++) {' +
-        '    var layer = comp.layer(i);' +
-        '    if (!(layer instanceof AVLayer) || !layer.source) continue;' +
-        '    if (layer.source instanceof CompItem) {' +
-        '      _walkCompAndReplace(layer.source, footageItems, visited);' +
-        '    }' +
-        '    var idx = getPlaceholderIndexFromName(layer.name);' +
-        '    if (idx >= 0 && idx < footageItems.length && footageItems[idx]) {' +
-        '      layer.replaceSource(footageItems[idx], false);' +
-        '    }' +
-        '  }' +
-        '}' +
-        'var proj = app.project;' +
-        'if (!proj) return "Проект не найден";' +
-        'var footageItems = getSelectedFootageItems();' +
-        'if (footageItems.length === 0) return "Выдели футажи в Project";' +
-        'var templateComp = findCompByName("' + compName.replace(/"/g, '\\"') + '");' +
-        'if (!templateComp) return "Не найден шаблон: ' + compName.replace(/"/g, '\\"') + '";' +
-        'var newComp = templateComp.duplicate();' +
-        'if (!newComp) return "Не удалось создать дубликат";' +
-        'app.beginUndoGroup("Replace Placeholders");' +
-        'try { _walkCompAndReplace(newComp, footageItems, []); }' +
-        'catch(e) { app.endUndoGroup(); return "Ошибка: " + e.toString(); }' +
-        'app.endUndoGroup();' +
-        'try { if (typeof newComp.openInViewer === "function") newComp.openInViewer(); } catch(e) {}' +
-        'return "Создана композиция: " + newComp.name;' +
-        '})()';
+      var extensionRoot = cs.getSystemPath(SystemPath.EXTENSION).replace(/\\/g, "/");
+      var jsxPath = extensionRoot + "/jsx/acc.jsx";
+      var compNameEsc = (compName || "TEMPLATE_MAIN").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
-      cs.evalScript(jsxCode, function (result) {
+      var buildCall =
+        'try { $.evalFile("' + jsxPath.replace(/"/g, '\\"') + '"); } catch(e) {} ' +
+        'acc_buildFromSelection("' + compNameEsc + '");';
+
+      cs.evalScript(buildCall, function (result) {
         if (result && typeof result === "string") {
           if (result.indexOf("Ошибка") !== -1 || result.indexOf("не найден") !== -1 || result.indexOf("Выдели") !== -1) {
             setStatus("Ошибка: " + result);

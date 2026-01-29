@@ -36,7 +36,7 @@
 
   var templates = [];
   var selectedTemplate = null;
-  var slotAssignments = {}; // index -> { type: "file"|"comp", path?, name }
+  var slotAssignments = {}; // index -> { type: "file"|"comp"|"text", path?, name, value?, compName? }
   var droppedFiles = [];
   var missingSlots = {}; // index -> true
 
@@ -169,6 +169,35 @@
       title.className = "slotTitle";
       title.textContent = "Slot " + idx + (ph.label ? " — " + ph.label : "");
 
+      card.appendChild(title);
+
+      if (ph.type === "text") {
+        var input = document.createElement("input");
+        input.className = "pathInput";
+        input.placeholder = "Введите текст";
+        input.value = slotAssignments[idx] && slotAssignments[idx].value ? slotAssignments[idx].value : "";
+        if (missingSlots[idx]) {
+          input.classList.add("missing");
+        }
+        input.addEventListener("input", function () {
+          var value = (input.value || "").trim();
+          if (!value) {
+            delete slotAssignments[idx];
+            delete missingSlots[idx];
+            input.classList.remove("missing");
+            setStatus("Текст очищен для слота " + idx, "info");
+            return;
+          }
+          slotAssignments[idx] = { type: "text", value: value, name: "TEXT: " + value };
+          delete missingSlots[idx];
+          input.classList.remove("missing");
+          setStatus("Назначен текст для слота " + idx, "success");
+        });
+        card.appendChild(input);
+        container.appendChild(card);
+        return;
+      }
+
       var drop = document.createElement("div");
       drop.className = "slotDrop";
       drop.textContent = slotAssignments[idx] ? slotAssignments[idx].name : "Перетащи файл/комп или кликни для выбора";
@@ -210,7 +239,6 @@
         assignSlotFromSelection(idx, drop);
       });
 
-      card.appendChild(title);
       card.appendChild(drop);
       container.appendChild(card);
     });
@@ -525,6 +553,8 @@
             providedSpecs[idx - 1] = { type: "comp", name: spec.compName };
           } else if (spec.type === "file" && spec.path) {
             providedSpecs[idx - 1] = { type: "file", path: spec.path };
+          } else if (spec.type === "text" && spec.value) {
+            providedSpecs[idx - 1] = { type: "text", value: spec.value };
           }
         }
       });
@@ -537,7 +567,7 @@
     if (placeholders.length) {
       placeholders.forEach(function (ph) {
         var idx = ph.index || 0;
-        if (slotAssignments[idx] && slotAssignments[idx].path) {
+        if (slotAssignments[idx] && (slotAssignments[idx].path || slotAssignments[idx].value || slotAssignments[idx].compName)) {
           anyAssigned = true;
         } else {
           missingSlots[idx] = true;
@@ -552,6 +582,7 @@
 
     setStatus("Запуск сборки (шаблон: " + compName + ")...", "info");
 
+    var templatePlaceholders = placeholders && placeholders.length ? placeholders : [];
     var jsxCode = '(function(){' +
       'function isInFolder(item, folder){' +
       '  if(!item || !folder) return false;' +
@@ -587,6 +618,34 @@
       '  }' +
       '  if(fallback) return fallback;' +
       '  return null;}' +
+      'function normalizeName(value){' +
+      '  return (value||\"\").replace(/^\\s+|\\s+$/g, \"\");' +
+      '}' +
+      'function findCompByNameAny(name){' +
+      '  var proj=app.project; if(!proj) return null;' +
+      '  var target=normalizeName(name);' +
+      '  for(var i=1;i<=proj.numItems;i++){' +
+      '    var it=proj.item(i);' +
+      '    if(it instanceof CompItem && normalizeName(it.name)===target){' +
+      '      return it;' +
+      '    }' +
+      '  }' +
+      '  return null;' +
+      '}' +
+      'function findLayerByRef(layerRef, folder){' +
+      '  if(!layerRef) return null;' +
+      '  var match=/^(.*)\\s*:\\s*Layer\\s*(\\d+)$/i.exec(layerRef);' +
+      '  if(!match) return null;' +
+      '  var compName=normalizeName(match[1]);' +
+      '  var idx=parseInt(match[2],10);' +
+      '  if(!compName || isNaN(idx)) return null;' +
+      '  var comp=findCompByName(compName, folder);' +
+      '  if(!comp || !(comp instanceof CompItem)){' +
+      '    comp=findCompByNameAny(compName);' +
+      '  }' +
+      '  if(!comp || !(comp instanceof CompItem)) return null;' +
+      '  try{ return comp.layer(idx); }catch(e){ return null; }' +
+      '}' +
       'function extractPlaceholderIndex(text){' +
       '  if(typeof text!==\"string\") return -1;' +
       '  var match=/PH[:_]?([0-9]+)/i.exec(text);' +
@@ -636,15 +695,18 @@
       '  }catch(eSrc){}' +
       '  return getPlaceholderIndexFromName(layer.name);' +
       '}' +
-      'function _walk(comp,items,visited,stats){' +
+      'function _walk(comp,items,visited,stats,specs){' +
       '  if(!comp||!(comp instanceof CompItem)) return;' +
       '  for(var v=0;v<visited.length;v++){ if(visited[v]===comp) return; }' +
       '  visited.push(comp);' +
       '  for(var i=1;i<=comp.numLayers;i++){' +
       '    var layer=comp.layer(i);' +
       '    stats.layers++;' +
-      '    if(!(layer instanceof AVLayer)||!layer.source) continue;' +
-      '    if(layer.source instanceof CompItem){ _walk(layer.source,items,visited,stats); }' +
+      '    if(!(layer instanceof AVLayer)) continue;' +
+      '    var hasTextProp=false;' +
+      '    try{ hasTextProp=!!layer.property(\"Source Text\"); }catch(_eHasText){}' +
+      '    if(!layer.source && !hasTextProp) continue;' +
+      '    if(layer.source instanceof CompItem){ _walk(layer.source,items,visited,stats,specs); }' +
       '    var idx=getPlaceholderIndexFromMarker(layer, stats);' +
       '    if(idx<0) idx=getPlaceholderIndexFromComment(layer);' +
       '    if(idx<0){' +
@@ -657,9 +719,34 @@
       '    if(idx<0) idx=getPlaceholderIndexFromName(layer.name);' +
       '    if(idx>=0){' +
       '      stats.found++;' +
+      '      var spec=(specs && specs.length) ? specs[idx] : null;' +
+      '      if(!spec && stats.logs && stats.logs.length<5){ stats.logs.push(\"idx \"+(idx+1)+\" no spec (layer: \"+layer.name+\")\"); }' +
+      '      if(spec && spec.type===\"text\"){' +
+      '        var textProp=null;' +
+      '        try{ textProp=layer.property(\"Source Text\"); }catch(_eText){}' +
+      '        if(!textProp){' +
+      '          try{' +
+      '            var textGroup=layer.property(\"ADBE Text Properties\");' +
+      '            if(textGroup) textProp=textGroup.property(\"ADBE Text Document\");' +
+      '          }catch(_eText2){}' +
+      '        }' +
+      '        if(textProp){' +
+      '          var textDoc=textProp.value;' +
+      '          textDoc.text=spec.value || \"\";' +
+      '          textProp.setValue(textDoc);' +
+      '          stats.replaced++;' +
+      '          if(stats.logs && stats.logs.length<5){ stats.logs.push(\"text ok idx \"+(idx+1)+\": \"+layer.name+\" -> \"+(spec.value||\"\")); }' +
+      '        } else {' +
+      '          if(stats.logs && stats.logs.length<5){ stats.logs.push(\"text fail idx \"+(idx+1)+\": \"+layer.name+\" (no Text Document)\"); }' +
+      '        }' +
+      '        continue;' +
+      '      }' +
       '      if(idx<items.length && items[idx]){' +
       '        layer.replaceSource(items[idx], false);' +
       '        stats.replaced++;' +
+      '        if(stats.logs && stats.logs.length<5){ stats.logs.push(\"replace ok idx \"+(idx+1)+\": \"+layer.name); }' +
+      '      } else {' +
+      '        if(stats.logs && stats.logs.length<5){ stats.logs.push(\"replace skip idx \"+(idx+1)+\": no item\"); }' +
       '      }' +
       '    }' +
       '  }}' +
@@ -703,6 +790,7 @@
       '      result.push(compByName[s.name] || null);' +
       '      continue;' +
       '    }' +
+      '    if(s.type===\"text\"){ result.push(null); continue; }' +
       '    if(s.type===\"file\" && s.path){' +
       '      var f=new File(s.path); if(!f.exists){ result.push(null); continue; }' +
       '      var found=indexByFsName[f.fsName] || indexByUri[f.absoluteURI] || null;' +
@@ -731,6 +819,31 @@
       '  }' +
       '  return result;' +
       '}' +
+      'function applyTextByLayerRef(placeholders, specs, folder, stats){' +
+      '  if(!placeholders || !placeholders.length) return;' +
+      '  for(var i=0;i<placeholders.length;i++){' +
+      '    var ph=placeholders[i]; if(!ph || ph.type!==\"text\") continue;' +
+      '    var idx=ph.index?ph.index-1:-1; if(idx<0) continue;' +
+      '    var spec=(specs && specs.length)?specs[idx]:null; if(!spec || !spec.value) continue;' +
+      '    if(stats) stats.textAttempts=(stats.textAttempts||0)+1;' +
+      '    var layer=findLayerByRef(ph.layerRef, folder); if(!layer) {' +
+      '      if(stats) stats.textMissing=(stats.textMissing||0)+1;' +
+      '      if(stats && stats.logs && stats.logs.length<10){ stats.logs.push(\"text ref missing idx \"+(idx+1)+\": \"+(ph.layerRef||\"\")); }' +
+      '      continue; }' +
+      '    var textProp=null;' +
+      '    try{ textProp=layer.property(\"Source Text\"); }catch(_eText){}' +
+      '    if(!textProp){' +
+      '      try{ var textGroup=layer.property(\"ADBE Text Properties\"); if(textGroup) textProp=textGroup.property(\"ADBE Text Document\"); }catch(_eText2){}' +
+      '    }' +
+      '    if(textProp){' +
+      '      var textDoc=textProp.value; textDoc.text=spec.value || \"\"; textProp.setValue(textDoc);' +
+      '      if(stats){ stats.replaced++; stats.textApplied=(stats.textApplied||0)+1; if(stats.logs && stats.logs.length<10){ stats.logs.push(\"text ref ok idx \"+(idx+1)+\": \"+layer.name); } }' +
+      '    } else {' +
+      '      if(stats) stats.textNoProp=(stats.textNoProp||0)+1;' +
+      '      if(stats && stats.logs && stats.logs.length<10){ stats.logs.push(\"text ref fail idx \"+(idx+1)+\": \"+layer.name+\" (no Text Document)\"); }' +
+      '    }' +
+      '  }' +
+      '}' +
       'var proj=app.project; if(!proj) return \"Проект не найден\";' +
       'var templateFolder=null;' +
       'var templateProjectPath=' + JSON.stringify(templateProjectPath) + ';' +
@@ -738,12 +851,13 @@
       'var comp=findCompByName(\"' + compName.replace(/"/g, '\\"') + '\", templateFolder);' +
       'if(!comp) return \"Не найден шаблон: ' + compName.replace(/"/g, '\\"') + '\";' +
       'var provided=' + JSON.stringify(providedSpecs) + ';' +
+      'var tplPlaceholders=' + JSON.stringify(templatePlaceholders) + ';' +
       'var items=(provided && provided.length) ? resolveItemsFromSpecs(provided) : wrapSelectedItems(getSelectedReplaceItems());' +
       'if(!items || items.length===0) items=[];' +
       'var targetComp=comp;' +
       'app.beginUndoGroup(\"Replace Placeholders\");' +
-      'var stats={found:0,replaced:0,layers:0,markers:0,samples:[]};' +
-      'try{ _walk(targetComp, items, [], stats);}catch(e){ app.endUndoGroup(); return \"Ошибка: \"+e.toString(); }' +
+      'var stats={found:0,replaced:0,layers:0,markers:0,samples:[],logs:[],textAttempts:0,textApplied:0,textMissing:0,textNoProp:0};' +
+      'try{ _walk(targetComp, items, [], stats, provided); applyTextByLayerRef(tplPlaceholders, provided, templateFolder, stats);}catch(e){ app.endUndoGroup(); return \"Ошибка: \"+e.toString(); }' +
       'app.endUndoGroup();' +
       'try{' +
       '  if(proj.activeItem && proj.activeItem instanceof CompItem){' +
@@ -753,7 +867,9 @@
       'try{ targetComp.name=' + JSON.stringify(templateName) + '; }catch(eName){}' +
       'try{ if(typeof targetComp.openInViewer===\"function\") targetComp.openInViewer(); }catch(e2){}' +
       'if(stats.found===0) return \"Не найдено плейсхолдеров (PH: в маркерах/комментарии/имени слоёв). Слоёв: \"+stats.layers+\", маркеров: \"+stats.markers+\", примеры: \"+stats.samples.join(\" | \");' +
-      'return \"Обновлена композиция: \" + targetComp.name + \". Плейсхолдеров: \" + stats.found + \", заменено: \" + stats.replaced;' +
+      'var textMsg=\" | text attempts: \"+stats.textAttempts+\", applied: \"+stats.textApplied+\", missing layer: \"+stats.textMissing+\", no TextProp: \"+stats.textNoProp;' +
+      'var logMsg=stats.logs.length?\" | log: \"+stats.logs.join(\" ; \"):\"\";' +
+      'return \"Обновлена композиция: \" + targetComp.name + \". Плейсхолдеров: \" + stats.found + \", заменено: \" + stats.replaced + textMsg + logMsg;' +
       '})()';
 
     cs.evalScript(jsxCode, function (result) {

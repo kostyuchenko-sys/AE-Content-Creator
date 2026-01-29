@@ -72,6 +72,11 @@
     }
 
     function detectPlaceholderType(layer) {
+        try {
+            if (layer && layer.property && layer.property("Source Text")) {
+                return "text";
+            }
+        } catch (e) {}
         if (layer.source instanceof CompItem) {
             return "comp";
         }
@@ -297,6 +302,10 @@
                 alertError("Project not found");
                 return;
             }
+            if (!proj.file) {
+                alertError("Save the project before packaging");
+                return;
+            }
             var compName = compDropdown.selection ? compDropdown.selection.text : "";
             var comp = null;
             for (var i = 0; i < comps.length; i++) {
@@ -332,6 +341,32 @@
                 return;
             }
 
+            var originalFile = proj.file;
+            var workProjectFile = new File(packageFolder.fsName + "/_working.aep");
+            try {
+                proj.save(workProjectFile);
+            } catch (eSaveCopy) {
+                alertError("Failed to save project copy: " + eSaveCopy.toString());
+                return;
+            }
+
+            app.open(workProjectFile);
+            proj = app.project;
+            var compCopy = null;
+            for (var ci = 1; ci <= proj.numItems; ci++) {
+                var it = proj.item(ci);
+                if (it instanceof CompItem && it.name === compName) {
+                    compCopy = it;
+                    break;
+                }
+            }
+            if (!compCopy) {
+                alertError("Main comp not found in copied project");
+                if (originalFile) app.open(originalFile);
+                return;
+            }
+            comp = compCopy;
+
             if (reduceCheckbox.value) {
                 try {
                     app.project.reduceProject(comp);
@@ -365,6 +400,11 @@
             var jsonFile = new File(packageFolder.fsName + "/template.json");
             writeJsonFile(jsonFile, templateJson);
 
+            if (originalFile) {
+                try {
+                    app.open(originalFile);
+                } catch (_eOpen) {}
+            }
             alert("Package created in: " + packageFolder.fsName);
         };
 

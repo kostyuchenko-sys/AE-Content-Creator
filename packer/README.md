@@ -30,7 +30,8 @@
   "project": { "aep": "project.aep" },
   "placeholders": [
     { "index": 1, "label": "Hero 1", "type": "video", "layerRef": "Layer 3" },
-    { "index": 2, "label": "Hero 2", "type": "image", "layerRef": "Layer 5" }
+    { "index": 2, "label": "Title", "type": "text", "layerRef": "Layer 7" },
+    { "index": 3, "label": "Hero 2", "type": "image", "layerRef": "Layer 5" }
   ]
 }
 ```

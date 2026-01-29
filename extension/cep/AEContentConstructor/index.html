@@ -72,45 +72,6 @@
         font-size: 11px;
       }
 
-      .dropZone {
-        padding: 20px;
-        border: 2px dashed #555;
-        border-radius: 4px;
-        text-align: center;
-        background: #252525;
-        cursor: pointer;
-        transition: all 0.2s;
-        font-size: 11px;
-        color: #999;
-      }
-
-      .dropZone:hover,
-      .dropZone.dragOver {
-        border-color: #007aff;
-        background: #2a2a2a;
-        color: #f3f3f3;
-      }
-
-      .dropZone.dragOver {
-        border-color: #4095ff;
-        background: #2f2f2f;
-      }
-
-      .footageList {
-        font-size: 10px;
-        color: #aaa;
-        margin-top: 4px;
-        max-height: 60px;
-        overflow-y: auto;
-      }
-
-      .footageItem {
-        padding: 2px 0;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
       .settingsRow {
         display: flex;
         gap: 8px;
@@ -249,12 +210,6 @@
 
       <div class="description">Слоты подстановки</div>
       <div class="slotsContainer" id="slotsContainer"></div>
-
-      <div class="dropZone" id="dropZone">
-        Перетащи файлы сюда<br />
-        <span style="font-size: 10px; color: #666;">или используй выделение в Project (футажи/композиции)</span>
-        <div class="footageList" id="footageList"></div>
-      </div>
 
       <div class="actionsRow">
         <button id="buildBtn">Build from selection</button>

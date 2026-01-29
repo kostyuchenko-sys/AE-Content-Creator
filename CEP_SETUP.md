@@ -14,6 +14,31 @@
 3. **Найди панель в меню**:
    - `Window → Extensions (Legacy) → AE Content Constructor`
 
+## Установка для команды (автообновление)
+
+1. Клонируй репозиторий.
+2. Запусти установщик:
+   ```bash
+   ./scripts/install.sh
+   ```
+
+Что делает install:
+- Ставит git hooks на `post-merge` и `post-checkout` (обновление после `git pull`).
+- Делает первый деплой панели и шаблонов.
+
+Для обновления достаточно:
+```bash
+git pull
+```
+
+Подробная инструкция для команды: `TEAM_SETUP.md`.
+
+## Где лежат шаблоны
+
+- Основные пакеты шаблонов лежат в `projects/`.
+- Панель может читать их напрямую из репозитория.
+- Рекомендуемый путь в UI: `<repo>/projects`.
+
 ## Если панель не появляется
 
 ### Проверь, что папка расширения на месте:
@@ -30,8 +55,7 @@ ls -la ~/Library/Application\ Support/Adobe/CEP/extensions/AEContentConstructor
 ### Если папки нет — синхронизируй вручную:
 ```bash
 # Из корня репозитория:
-rsync -a extension/cep/AEContentConstructor/ ~/Library/Application\ Support/Adobe/CEP/extensions/AEContentConstructor/
-rsync -a templates/ ~/Library/Application\ Support/Adobe/CEP/extensions/AEContentConstructor/templates/
+./scripts/deploy.sh
 ```
 
 ### Проверь версию After Effects:

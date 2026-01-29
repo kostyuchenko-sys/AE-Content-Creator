@@ -297,13 +297,16 @@
       return;
     }
 
-    var defaultPath = cs.getSystemPath(SystemPath.EXTENSION) + "/templates";
+    var extConst = (typeof SystemPath !== "undefined" && SystemPath.EXTENSION)
+      ? SystemPath.EXTENSION
+      : (cs.SystemPath && cs.SystemPath.EXTENSION ? cs.SystemPath.EXTENSION : null);
+    var defaultPath = extConst ? cs.getSystemPath(extConst) + "/templates" : "";
     var saved = getSavedRepoPath();
     var currentPath = getRepoPathInput() || saved || defaultPath;
     setRepoPathInput(currentPath);
 
     var loaded = loadTemplatesFromPath(currentPath);
-    if (!loaded.length && currentPath !== defaultPath) {
+    if (!loaded.length && defaultPath && currentPath !== defaultPath) {
       loaded = loadTemplatesFromPath(defaultPath);
     }
 

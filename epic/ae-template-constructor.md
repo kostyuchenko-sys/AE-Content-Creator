@@ -177,6 +177,9 @@ function buildFromSelection() {
 - **2026-01-28** — **feature** — Улучшен UX ошибок и статусов панели  
   - **Details**: Добавлены статусы с типами (info/success/error), подсветка незаполненных слотов, кнопка очистки слотов и валидация перед сборкой.
   - **Links**: `extension/cep/AEContentConstructor/index.html`, `extension/cep/AEContentConstructor/host.js`.
+- **2026-01-28** — **feature** — Импорт шаблона в текущий проект  
+  - **Details**: Если в `template.json` указан `project.aep`, панель импортирует шаблонный проект в текущий AE‑проект, ищет `mainCompName` внутри импортированного пакета и добавляет созданную комп‑копию как слой в активную композицию.
+  - **Links**: `extension/cep/AEContentConstructor/host.js`, `packer/template_packer.jsx`.
 
 *(Новые шаги реализации и ключевые решения по этому epic добавляем сюда по мере движения.)*
 

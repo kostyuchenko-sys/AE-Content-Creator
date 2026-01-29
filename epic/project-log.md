@@ -83,6 +83,9 @@
 - **2026-01-28** — **feature** — UX статусы и валидация слотов в панели  
   - **Details**: Добавлены цветные статусы (info/success/error), подсветка незаполненных слотов, кнопка очистки слотов и понятные ошибки при отсутствии выбора/футажей.
   - **Links**: `extension/cep/AEContentConstructor/index.html`, `extension/cep/AEContentConstructor/host.js`.
+- **2026-01-28** — **feature** — Импорт шаблона в текущий проект  
+  - **Details**: При сборке панель импортирует `project.aep` из пакета шаблона, ищет `mainCompName` в импортированном наборе и добавляет новую комп‑копию в активную композицию.
+  - **Links**: `extension/cep/AEContentConstructor/host.js`, `packer/template_packer.jsx`.
 
 ---
 

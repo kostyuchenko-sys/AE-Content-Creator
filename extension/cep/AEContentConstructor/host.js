@@ -281,6 +281,10 @@
           if (tpl.preview.jpg) tpl.previewPath = base + "/" + tpl.preview.jpg;
           if (tpl.preview.mp4) tpl.previewPath = base + "/" + tpl.preview.mp4;
         }
+        if (tpl.project && tpl.project.aep) {
+          var basePath = tpl._basePath || "";
+          tpl.projectPath = basePath + "/" + tpl.project.aep;
+        }
         return tpl;
       });
   }
@@ -434,6 +438,7 @@
     }
 
     var compName = (selectedTemplate && selectedTemplate.mainCompName) || "TEMPLATE_MAIN";
+    var templateProjectPath = selectedTemplate && selectedTemplate.projectPath ? selectedTemplate.projectPath : "";
     if (!selectedTemplate) {
       setStatus("Шаблон не выбран.", "error");
       return;
@@ -475,14 +480,37 @@
     setStatus("Запуск сборки (шаблон: " + compName + ")...", "info");
 
     var jsxCode = '(function(){' +
+      'function isInFolder(item, folder){' +
+      '  if(!item || !folder) return false;' +
+      '  var parent=item.parentFolder;' +
+      '  while(parent){ if(parent===folder) return true; parent=parent.parentFolder; }' +
+      '  return false; }' +
+      'function importTemplateProject(path){' +
+      '  try{' +
+      '    if(!path) return null;' +
+      '    var f=new File(path);' +
+      '    if(!f.exists) return null;' +
+      '    var io=new ImportOptions(f);' +
+      '    try{ io.importAs=ImportAsType.PROJECT; }catch(_e0){}' +
+      '    return app.project.importFile(io);' +
+      '  }catch(e){ return null; }' +
+      '}' +
       'function getSelectedFootageItems(){' +
       '  var proj=app.project; if(!proj) return [];' +
       '  var items=proj.selection; var result=[];' +
       '  for(var i=0;i<items.length;i++){ if(items[i] instanceof FootageItem) result.push(items[i]); }' +
       '  return result;}' +
-      'function findCompByName(name){' +
+      'function findCompByName(name, folder){' +
       '  var proj=app.project; if(!proj) return null;' +
-      '  for(var i=1;i<=proj.numItems;i++){ var it=proj.item(i); if(it instanceof CompItem && it.name===name) return it; }' +
+      '  var fallback=null;' +
+      '  for(var i=1;i<=proj.numItems;i++){' +
+      '    var it=proj.item(i);' +
+      '    if(it instanceof CompItem && it.name===name){' +
+      '      if(folder && isInFolder(it, folder)) return it;' +
+      '      if(!fallback) fallback=it;' +
+      '    }' +
+      '  }' +
+      '  if(fallback) return fallback;' +
       '  return null;}' +
       'function getPlaceholderIndexFromName(layerName){' +
       '  if(typeof layerName!==\"string\") return -1;' +
@@ -521,7 +549,10 @@
       '  }' +
       '  return result;}' +
       'var proj=app.project; if(!proj) return \"Проект не найден\";' +
-      'var comp=findCompByName(\"' + compName.replace(/"/g, '\\"') + '\");' +
+      'var templateFolder=null;' +
+      'var templateProjectPath=' + JSON.stringify(templateProjectPath) + ';' +
+      'if(templateProjectPath && templateProjectPath.length){ templateFolder=importTemplateProject(templateProjectPath); }' +
+      'var comp=findCompByName(\"' + compName.replace(/"/g, '\\"') + '\", templateFolder);' +
       'if(!comp) return \"Не найден шаблон: ' + compName.replace(/"/g, '\\"') + '\";' +
       'var provided=' + JSON.stringify(providedPaths) + ';' +
       'var items=(provided && provided.length) ? resolveItemsFromPaths(provided) : getSelectedFootageItems();' +
@@ -530,6 +561,11 @@
       'app.beginUndoGroup(\"Replace Placeholders\");' +
       'try{ _walk(newComp, items, []);}catch(e){ app.endUndoGroup(); return \"Ошибка: \"+e.toString(); }' +
       'app.endUndoGroup();' +
+      'try{' +
+      '  if(proj.activeItem && proj.activeItem instanceof CompItem){' +
+      '    proj.activeItem.layers.add(newComp);' +
+      '  }' +
+      '}catch(eLayer){}' +
       'try{ if(typeof newComp.openInViewer===\"function\") newComp.openInViewer(); }catch(e2){}' +
       'return \"Создана композиция: \" + newComp.name;' +
       '})()';

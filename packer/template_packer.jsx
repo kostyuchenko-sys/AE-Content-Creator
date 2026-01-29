@@ -86,13 +86,14 @@
         return "footage";
     }
 
-    function buildTemplateJson(templateId, name, description, mainCompName, placeholders, preview) {
+    function buildTemplateJson(templateId, name, description, mainCompName, placeholders, preview, project) {
         return {
             id: templateId,
             name: name,
             description: description,
             mainCompName: mainCompName,
             preview: preview,
+            project: project,
             placeholders: placeholders
         };
     }
@@ -357,7 +358,8 @@
                 descInput.text,
                 comp.name,
                 placeholders,
-                { mp4: "preview.mp4", jpg: "preview.jpg" }
+                { mp4: "preview.mp4", jpg: "preview.jpg" },
+                { aep: "project.aep" }
             );
 
             var jsonFile = new File(packageFolder.fsName + "/template.json");

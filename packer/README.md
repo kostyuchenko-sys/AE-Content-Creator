@@ -27,6 +27,7 @@
   "description": "Простой сториз-шаблон",
   "mainCompName": "TEMPLATE_MAIN",
   "preview": { "mp4": "preview.mp4", "jpg": "preview.jpg" },
+  "project": { "aep": "project.aep" },
   "placeholders": [
     { "index": 1, "label": "Hero 1", "type": "video", "layerRef": "Layer 3" },
     { "index": 2, "label": "Hero 2", "type": "image", "layerRef": "Layer 5" }

@@ -548,6 +548,7 @@
     var btn = document.getElementById("buildBtn");
     var reloadBtn = document.getElementById("reloadTemplatesBtn");
     var clearBtn = document.getElementById("clearSlotsBtn");
+    var browseBtn = document.getElementById("browseRepoBtn");
     if (!btn) return;
 
     setRepoPathInput(getSavedRepoPath());
@@ -559,6 +560,23 @@
         var path = getRepoPathInput();
         if (path) saveRepoPath(path);
         loadTemplates();
+      });
+    }
+
+    if (browseBtn && window.cep && window.cep.fs && window.cep.fs.showOpenDialog) {
+      browseBtn.addEventListener("click", function () {
+        var res = window.cep.fs.showOpenDialog(
+          true,
+          false,
+          "Select templates repo folder"
+        );
+        if (res && res.data && res.data.length) {
+          var selectedPath = normalizePath(res.data[0]);
+          setRepoPathInput(selectedPath);
+          saveRepoPath(selectedPath);
+          loadTemplates();
+          setStatus("Выбрана папка репозитория шаблонов.", "info");
+        }
       });
     }
 

@@ -36,7 +36,7 @@
 
   var templates = [];
   var selectedTemplate = null;
-  var slotAssignments = {}; // index -> { path, name }
+  var slotAssignments = {}; // index -> { type: "file"|"comp", path?, name }
   var droppedFiles = [];
   var missingSlots = {}; // index -> true
 
@@ -171,7 +171,7 @@
 
       var drop = document.createElement("div");
       drop.className = "slotDrop";
-      drop.textContent = slotAssignments[idx] ? slotAssignments[idx].name : "Перетащи файл";
+      drop.textContent = slotAssignments[idx] ? slotAssignments[idx].name : "Перетащи файл/комп или кликни для выбора";
       if (missingSlots[idx]) {
         drop.classList.add("missing");
       }
@@ -193,19 +193,81 @@
         e.stopPropagation();
         drop.classList.remove("dragOver");
         var files = e.dataTransfer.files;
-        if (!files || files.length === 0) return;
+        if (!files || files.length === 0) {
+          assignSlotFromSelection(idx, drop);
+          return;
+        }
         var file = files[0];
         var path = normalizePath(file.path || file.name);
-        slotAssignments[idx] = { path: path, name: file.name || path };
+        slotAssignments[idx] = { type: "file", path: path, name: file.name || path };
         drop.textContent = slotAssignments[idx].name;
         delete missingSlots[idx];
         drop.classList.remove("missing");
         setStatus("Назначен файл для слота " + idx, "success");
       });
 
+      drop.addEventListener("click", function () {
+        assignSlotFromSelection(idx, drop);
+      });
+
       card.appendChild(title);
       card.appendChild(drop);
       container.appendChild(card);
+    });
+  }
+
+  function assignSlotFromSelection(idx, dropEl) {
+    var cs = getCSInterface();
+    if (!cs) {
+      setStatus("CSInterface недоступен. Запусти панель в After Effects.", "error");
+      return;
+    }
+
+    var jsx = '(function(){' +
+      'try{' +
+      '  var proj=app.project; if(!proj) return \"\";' +
+      '  var items=proj.selection; if(!items || items.length===0) return \"\";' +
+      '  var it=items[0];' +
+      '  if(it instanceof FootageItem){' +
+      '    var p=\"\"; try{ p=it.file ? it.file.fsName : \"\"; }catch(e1){}' +
+      '    return JSON.stringify({type:\"file\", name:it.name||\"\", path:p});' +
+      '  }' +
+      '  if(it instanceof CompItem){' +
+      '    return JSON.stringify({type:\"comp\", name:it.name||\"\"});' +
+      '  }' +
+      '  return \"\";' +
+      '}catch(e){ return \"\"; }' +
+      '})()';
+
+    cs.evalScript(jsx, function (result) {
+      if (!result || typeof result !== "string") {
+        setStatus("Выдели футаж или композицию в Project.", "error");
+        return;
+      }
+      var data = null;
+      try {
+        data = JSON.parse(result);
+      } catch (e) {
+        data = null;
+      }
+      if (!data || !data.type) {
+        setStatus("Выдели футаж или композицию в Project.", "error");
+        return;
+      }
+      if (data.type === "comp") {
+        slotAssignments[idx] = { type: "comp", name: "COMP: " + (data.name || "Comp"), compName: data.name || "" };
+      } else if (data.type === "file" && data.path) {
+        slotAssignments[idx] = { type: "file", path: data.path, name: data.name || data.path };
+      } else {
+        setStatus("Не удалось получить данные выбранного элемента.", "error");
+        return;
+      }
+      if (dropEl) {
+        dropEl.textContent = slotAssignments[idx].name;
+        dropEl.classList.remove("missing");
+      }
+      delete missingSlots[idx];
+      setStatus("Назначен элемент для слота " + idx, "success");
     });
   }
 
@@ -284,6 +346,9 @@
         if (tpl.project && tpl.project.aep) {
           var basePath = tpl._basePath || "";
           tpl.projectPath = basePath + "/" + tpl.project.aep;
+        } else if (tpl._basePath) {
+          // Fallback: assume packaged project.aep in template folder
+          tpl.projectPath = tpl._basePath + "/project.aep";
         }
         return tpl;
       });
@@ -438,25 +503,34 @@
     }
 
     var compName = (selectedTemplate && selectedTemplate.mainCompName) || "TEMPLATE_MAIN";
+    var templateName = (selectedTemplate && selectedTemplate.name) ? selectedTemplate.name : compName;
     var templateProjectPath = selectedTemplate && selectedTemplate.projectPath ? selectedTemplate.projectPath : "";
     if (!selectedTemplate) {
       setStatus("Шаблон не выбран.", "error");
       return;
     }
+    if (!templateProjectPath) {
+      setStatus("В template.json нет project.aep — поиск шаблона будет в текущем проекте.", "info");
+    }
 
     // Собираем массив путей по слотам (если есть)
-    var providedPaths = [];
+    var providedSpecs = [];
     var placeholders = (selectedTemplate && selectedTemplate.placeholders) ? selectedTemplate.placeholders : [];
     if (placeholders.length) {
       selectedTemplate.placeholders.forEach(function (ph) {
         var idx = ph.index || 0;
-        if (slotAssignments[idx] && slotAssignments[idx].path) {
-          providedPaths[idx - 1] = slotAssignments[idx].path;
+        if (slotAssignments[idx]) {
+          var spec = slotAssignments[idx];
+          if (spec.type === "comp" && spec.compName) {
+            providedSpecs[idx - 1] = { type: "comp", name: spec.compName };
+          } else if (spec.type === "file" && spec.path) {
+            providedSpecs[idx - 1] = { type: "file", path: spec.path };
+          }
         }
       });
     }
 
-    // Валидация слотов: если есть частичное заполнение — просим дозаполнить
+    // Валидация слотов: подсветка незаполненных, но не блокируем сборку
     missingSlots = {};
     var anyAssigned = false;
     var missingList = [];
@@ -471,10 +545,9 @@
         }
       });
     }
-    if (placeholders.length && anyAssigned && missingList.length) {
+    if (placeholders.length && missingList.length) {
       renderSlots();
-      setStatus("Заполни все слоты: " + missingList.join(", "), "error");
-      return;
+      setStatus("Не все слоты заполнены: " + missingList.join(", ") + ". Пустые останутся без замены.", "info");
     }
 
     setStatus("Запуск сборки (шаблон: " + compName + ")...", "info");
@@ -495,10 +568,12 @@
       '    return app.project.importFile(io);' +
       '  }catch(e){ return null; }' +
       '}' +
-      'function getSelectedFootageItems(){' +
+      'function getSelectedReplaceItems(){' +
       '  var proj=app.project; if(!proj) return [];' +
       '  var items=proj.selection; var result=[];' +
-      '  for(var i=0;i<items.length;i++){ if(items[i] instanceof FootageItem) result.push(items[i]); }' +
+      '  for(var i=0;i<items.length;i++){' +
+      '    if(items[i] instanceof FootageItem || items[i] instanceof CompItem){ result.push(items[i]); }' +
+      '  }' +
       '  return result;}' +
       'function findCompByName(name, folder){' +
       '  var proj=app.project; if(!proj) return null;' +
@@ -512,67 +587,179 @@
       '  }' +
       '  if(fallback) return fallback;' +
       '  return null;}' +
-      'function getPlaceholderIndexFromName(layerName){' +
-      '  if(typeof layerName!==\"string\") return -1;' +
-      '  var base=layerName.split(\" \")[0];' +
-      '  var match=/^PH_?(\\\\d+)/.exec(base);' +
+      'function extractPlaceholderIndex(text){' +
+      '  if(typeof text!==\"string\") return -1;' +
+      '  var match=/PH[:_]?([0-9]+)/i.exec(text);' +
       '  if(!match) return -1;' +
       '  var num=parseInt(match[1],10);' +
-      '  return (isNaN(num)||num<=0)?-1:num-1;}' +
-      'function _walk(comp,items,visited){' +
+      '  return (isNaN(num)||num<=0)?-1:num-1;' +
+      '}' +
+      'function getPlaceholderIndexFromName(layerName){' +
+      '  return extractPlaceholderIndex(layerName);' +
+      '}' +
+      'function getPlaceholderIndexFromComment(layer){' +
+      '  try{' +
+      '    if(layer && layer.comment){' +
+      '      return extractPlaceholderIndex(layer.comment);' +
+      '    }' +
+      '    return -1;' +
+      '  }catch(e){ return -1; }' +
+      '}' +
+      'function getPlaceholderIndexFromMarker(layer, stats){' +
+      '  try{' +
+      '    var markerProp=layer.property(\"Marker\") || layer.property(\"ADBE Marker\");' +
+      '    if(!markerProp || markerProp.numKeys<1) return -1;' +
+      '    if(stats) stats.markers += markerProp.numKeys;' +
+      '    for(var k=1;k<=markerProp.numKeys;k++){' +
+      '      var mv=markerProp.keyValue(k);' +
+      '      var comment=(mv && mv.comment) ? mv.comment : \"\";' +
+      '      if(!comment){' +
+      '        try{ comment=markerProp.valueAtTime(markerProp.keyTime(k), false).comment || \"\"; }catch(_e0){}' +
+      '      }' +
+      '      var idx=extractPlaceholderIndex(comment);' +
+      '      if(idx>=0) return idx;' +
+      '      if(stats && stats.samples.length<5 && comment){ stats.samples.push(layer.name+\": \"+comment); }' +
+      '    }' +
+      '    return -1;' +
+      '  }catch(e){ return -1; }' +
+      '}' +
+      'function getPlaceholderIndex(layer){' +
+      '  var idx=getPlaceholderIndexFromMarker(layer, null);' +
+      '  if(idx>=0) return idx;' +
+      '  idx=getPlaceholderIndexFromComment(layer);' +
+      '  if(idx>=0) return idx;' +
+      '  try{' +
+      '    if(layer && layer.source && layer.source.name){' +
+      '      idx=extractPlaceholderIndex(layer.source.name);' +
+      '      if(idx>=0) return idx;' +
+      '    }' +
+      '  }catch(eSrc){}' +
+      '  return getPlaceholderIndexFromName(layer.name);' +
+      '}' +
+      'function _walk(comp,items,visited,stats){' +
       '  if(!comp||!(comp instanceof CompItem)) return;' +
       '  for(var v=0;v<visited.length;v++){ if(visited[v]===comp) return; }' +
       '  visited.push(comp);' +
       '  for(var i=1;i<=comp.numLayers;i++){' +
       '    var layer=comp.layer(i);' +
+      '    stats.layers++;' +
       '    if(!(layer instanceof AVLayer)||!layer.source) continue;' +
-      '    if(layer.source instanceof CompItem){ _walk(layer.source,items,visited); }' +
-      '    var idx=getPlaceholderIndexFromName(layer.name);' +
-      '    if(idx>=0 && idx<items.length && items[idx]){ layer.replaceSource(items[idx], false); }' +
+      '    if(layer.source instanceof CompItem){ _walk(layer.source,items,visited,stats); }' +
+      '    var idx=getPlaceholderIndexFromMarker(layer, stats);' +
+      '    if(idx<0) idx=getPlaceholderIndexFromComment(layer);' +
+      '    if(idx<0){' +
+      '      try{' +
+      '        if(layer && layer.source && layer.source.name){' +
+      '          idx=extractPlaceholderIndex(layer.source.name);' +
+      '        }' +
+      '      }catch(eSrc2){}' +
+      '    }' +
+      '    if(idx<0) idx=getPlaceholderIndexFromName(layer.name);' +
+      '    if(idx>=0){' +
+      '      stats.found++;' +
+      '      if(idx<items.length && items[idx]){' +
+      '        layer.replaceSource(items[idx], false);' +
+      '        stats.replaced++;' +
+      '      }' +
+      '    }' +
       '  }}' +
-      'function resolveItemsFromPaths(paths){' +
+      'function createPrecompForFootage(footage, idx){' +
+      '  try{' +
+      '    if(!footage || !(footage instanceof FootageItem)) return null;' +
+      '    var w=1080, h=1920;' +
+      '    var dur=60.0;' +
+      '    var fr=25;' +
+      '    try{ if(footage.mainSource && footage.mainSource.conformFrameRate){ fr=footage.mainSource.conformFrameRate; } }catch(_eFr){}' +
+      '    if(!fr || fr<=0) fr=25;' +
+      '    var name=\"PRECOMP_PH\" + (idx+1);' +
+      '    var comp=app.project.items.addComp(name, w, h, 1.0, dur, fr);' +
+      '    var layer=comp.layers.add(footage);' +
+      '    if(layer && layer.source){' +
+      '      var fw=layer.source.width||w; var fh=layer.source.height||h;' +
+      '      if(fw>0 && fh>0){' +
+      '        var scale=Math.max(w/fw, h/fh)*100;' +
+      '        layer.property(\"Scale\").setValue([scale, scale]);' +
+      '      }' +
+      '    }' +
+      '    return comp;' +
+      '  }catch(e){ return null; }' +
+      '}' +
+      'function resolveItemsFromSpecs(specs){' +
       '  var proj=app.project; if(!proj) return [];' +
       '  var result=[];' +
       '  var indexByFsName={}; var indexByUri={};' +
+      '  var compByName={};' +
       '  for(var j=1;j<=proj.numItems;j++){' +
       '    var it=proj.item(j);' +
       '    if(it instanceof FootageItem && it.file){' +
       '      try{indexByFsName[it.file.fsName]=it;}catch(_eA){}' +
       '      try{indexByUri[it.file.absoluteURI]=it;}catch(_eB){}' +
+      '    } else if(it instanceof CompItem){' +
+      '      if(!compByName[it.name]) compByName[it.name]=it;' +
       '    }}' +
-      '  for(var i=0;i<paths.length;i++){' +
-      '    var p=paths[i]; if(!p){ result.push(null); continue; }' +
-      '    var f=new File(p); if(!f.exists){ result.push(null); continue; }' +
-      '    var found=indexByFsName[f.fsName] || indexByUri[f.absoluteURI] || null;' +
-      '    if(!found){ var io=new ImportOptions(f); var newIt=proj.importFile(io); if(newIt){found=newIt;}}' +
-      '    result.push(found);' +
+      '  for(var i=0;i<specs.length;i++){' +
+      '    var s=specs[i]; if(!s){ result.push(null); continue; }' +
+      '    if(s.type===\"comp\" && s.name){' +
+      '      result.push(compByName[s.name] || null);' +
+      '      continue;' +
+      '    }' +
+      '    if(s.type===\"file\" && s.path){' +
+      '      var f=new File(s.path); if(!f.exists){ result.push(null); continue; }' +
+      '      var found=indexByFsName[f.fsName] || indexByUri[f.absoluteURI] || null;' +
+      '      if(!found){ var io=new ImportOptions(f); var newIt=proj.importFile(io); if(newIt){found=newIt;}}' +
+      '      if(found && found instanceof FootageItem){' +
+      '        var pre= createPrecompForFootage(found, i);' +
+      '        result.push(pre || found);' +
+      '      } else {' +
+      '        result.push(found);' +
+      '      }' +
+      '      continue;' +
+      '    }' +
+      '    result.push(null);' +
       '  }' +
       '  return result;}' +
+      'function wrapSelectedItems(items){' +
+      '  var result=[];' +
+      '  for(var i=0;i<items.length;i++){' +
+      '    var it=items[i];' +
+      '    if(it instanceof FootageItem){' +
+      '      var pre=createPrecompForFootage(it, i);' +
+      '      result.push(pre || it);' +
+      '    } else {' +
+      '      result.push(it);' +
+      '    }' +
+      '  }' +
+      '  return result;' +
+      '}' +
       'var proj=app.project; if(!proj) return \"Проект не найден\";' +
       'var templateFolder=null;' +
       'var templateProjectPath=' + JSON.stringify(templateProjectPath) + ';' +
       'if(templateProjectPath && templateProjectPath.length){ templateFolder=importTemplateProject(templateProjectPath); }' +
       'var comp=findCompByName(\"' + compName.replace(/"/g, '\\"') + '\", templateFolder);' +
       'if(!comp) return \"Не найден шаблон: ' + compName.replace(/"/g, '\\"') + '\";' +
-      'var provided=' + JSON.stringify(providedPaths) + ';' +
-      'var items=(provided && provided.length) ? resolveItemsFromPaths(provided) : getSelectedFootageItems();' +
-      'if(!items || items.length===0) return \"Выдели футажи в Project\";' +
-      'var newComp=comp.duplicate(); if(!newComp) return \"Не удалось создать дубликат\";' +
+      'var provided=' + JSON.stringify(providedSpecs) + ';' +
+      'var items=(provided && provided.length) ? resolveItemsFromSpecs(provided) : wrapSelectedItems(getSelectedReplaceItems());' +
+      'if(!items || items.length===0) items=[];' +
+      'var targetComp=comp;' +
       'app.beginUndoGroup(\"Replace Placeholders\");' +
-      'try{ _walk(newComp, items, []);}catch(e){ app.endUndoGroup(); return \"Ошибка: \"+e.toString(); }' +
+      'var stats={found:0,replaced:0,layers:0,markers:0,samples:[]};' +
+      'try{ _walk(targetComp, items, [], stats);}catch(e){ app.endUndoGroup(); return \"Ошибка: \"+e.toString(); }' +
       'app.endUndoGroup();' +
       'try{' +
       '  if(proj.activeItem && proj.activeItem instanceof CompItem){' +
-      '    proj.activeItem.layers.add(newComp);' +
+      '    proj.activeItem.layers.add(targetComp);' +
       '  }' +
       '}catch(eLayer){}' +
-      'try{ if(typeof newComp.openInViewer===\"function\") newComp.openInViewer(); }catch(e2){}' +
-      'return \"Создана композиция: \" + newComp.name;' +
+      'try{ targetComp.name=' + JSON.stringify(templateName) + '; }catch(eName){}' +
+      'try{ if(typeof targetComp.openInViewer===\"function\") targetComp.openInViewer(); }catch(e2){}' +
+      'if(stats.found===0) return \"Не найдено плейсхолдеров (PH: в маркерах/комментарии/имени слоёв). Слоёв: \"+stats.layers+\", маркеров: \"+stats.markers+\", примеры: \"+stats.samples.join(\" | \");' +
+      'return \"Обновлена композиция: \" + targetComp.name + \". Плейсхолдеров: \" + stats.found + \", заменено: \" + stats.replaced;' +
       '})()';
 
     cs.evalScript(jsxCode, function (result) {
       if (result && typeof result === "string") {
-        if (result.indexOf("Ошибка") !== -1 || result.indexOf("не найден") !== -1 || result.indexOf("Выдели") !== -1) {
+        var resultLower = result.toLowerCase();
+        if (resultLower.indexOf("ошибка") !== -1 || resultLower.indexOf("не найден") !== -1 || resultLower.indexOf("выдели") !== -1) {
           setStatus("Ошибка: " + result, "error");
         } else {
           setStatus("Готово. " + result, "success");

@@ -551,9 +551,27 @@
     var browseBtn = document.getElementById("browseRepoBtn");
     if (!btn) return;
 
-    setRepoPathInput(getSavedRepoPath());
-    loadTemplates();
-    setupDragAndDrop();
+    try {
+      setStatus("Панель загружена.", "info");
+      var cs = getCSInterface();
+      if (!cs) {
+        setStatus("CSInterface недоступен. Проверь CSInterface.js.", "error");
+      }
+
+      // Глобально разрешаем drag&drop в документе
+      document.addEventListener("dragover", function (e) {
+        e.preventDefault();
+      });
+      document.addEventListener("drop", function (e) {
+        e.preventDefault();
+      });
+
+      setRepoPathInput(getSavedRepoPath());
+      loadTemplates();
+      setupDragAndDrop();
+    } catch (e) {
+      setStatus("Ошибка инициализации: " + e.toString(), "error");
+    }
 
     if (reloadBtn) {
       reloadBtn.addEventListener("click", function () {
@@ -563,8 +581,12 @@
       });
     }
 
-    if (browseBtn && window.cep && window.cep.fs && window.cep.fs.showOpenDialog) {
+    if (browseBtn) {
       browseBtn.addEventListener("click", function () {
+        if (!window.cep || !window.cep.fs || !window.cep.fs.showOpenDialog) {
+          setStatus("Browse недоступен: CEP FS не найден.", "error");
+          return;
+        }
         var res = window.cep.fs.showOpenDialog(
           true,
           false,

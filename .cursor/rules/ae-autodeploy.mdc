@@ -1,0 +1,14 @@
+---
+description: Auto-deploy AE extension changes to CEP folder
+globs: extension/cep/AEContentConstructor/**,packer/**
+alwaysApply: false
+---
+
+# Auto-deploy to AE after changes
+
+- After editing files under `extension/cep/AEContentConstructor/**` or `packer/**`,
+  run the deploy hook to sync changes to the local CEP folder:
+  `.git/hooks/post-commit`.
+- If no commit is needed, run the hook manually once after changes.
+- Do not ask the user to “deploy” each time; keep the CEP folder in sync so
+  they can test immediately in After Effects.

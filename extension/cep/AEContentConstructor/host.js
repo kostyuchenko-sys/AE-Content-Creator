@@ -200,9 +200,37 @@
 
       var drop = document.createElement("div");
       drop.className = "slotDrop";
-      drop.textContent = slotAssignments[idx] ? slotAssignments[idx].name : "Перетащи файл/комп или кликни для выбора";
       if (missingSlots[idx]) {
         drop.classList.add("missing");
+      }
+
+      var assignment = slotAssignments[idx];
+      if (assignment && assignment.path && assignment.type === "file") {
+        var ext = (assignment.name || "").toLowerCase();
+        var isVideo = /\.(mp4|mov|avi|webm|mkv)$/.test(ext);
+        var isImage = /\.(jpg|jpeg|png|gif|bmp|webp)$/.test(ext);
+        if (isImage || isVideo) {
+          var preview = document.createElement(isVideo ? "video" : "img");
+          preview.className = "slotPreview" + (isVideo ? " video" : "");
+          preview.src = toFileUrl(assignment.path);
+          if (isVideo) {
+            preview.muted = true;
+            preview.loop = true;
+            preview.playsInline = true;
+            preview.autoplay = true;
+          }
+          var label = document.createElement("div");
+          label.className = "slotLabel";
+          label.textContent = assignment.name || "";
+          drop.appendChild(preview);
+          drop.appendChild(label);
+        } else {
+          drop.textContent = assignment.name || "Перетащи файл/комп или кликни для выбора";
+        }
+      } else if (assignment && assignment.name) {
+        drop.textContent = assignment.name;
+      } else {
+        drop.textContent = "Перетащи файл/комп или кликни для выбора";
       }
 
       drop.addEventListener("dragover", function (e) {
@@ -229,9 +257,8 @@
         var file = files[0];
         var path = normalizePath(file.path || file.name);
         slotAssignments[idx] = { type: "file", path: path, name: file.name || path };
-        drop.textContent = slotAssignments[idx].name;
         delete missingSlots[idx];
-        drop.classList.remove("missing");
+        renderSlots();
         setStatus("Назначен файл для слота " + idx, "success");
       });
 
@@ -290,11 +317,8 @@
         setStatus("Не удалось получить данные выбранного элемента.", "error");
         return;
       }
-      if (dropEl) {
-        dropEl.textContent = slotAssignments[idx].name;
-        dropEl.classList.remove("missing");
-      }
       delete missingSlots[idx];
+      renderSlots();
       setStatus("Назначен элемент для слота " + idx, "success");
     });
   }
@@ -845,6 +869,8 @@
       '  }' +
       '}' +
       'var proj=app.project; if(!proj) return \"Проект не найден\";' +
+      'var activeCompBefore=null;' +
+      'try{ if(proj.activeItem && proj.activeItem instanceof CompItem){ activeCompBefore=proj.activeItem; } }catch(_eActive){}' +
       'var templateFolder=null;' +
       'var templateProjectPath=' + JSON.stringify(templateProjectPath) + ';' +
       'if(templateProjectPath && templateProjectPath.length){ templateFolder=importTemplateProject(templateProjectPath); }' +
@@ -859,13 +885,14 @@
       'var stats={found:0,replaced:0,layers:0,markers:0,samples:[],logs:[],textAttempts:0,textApplied:0,textMissing:0,textNoProp:0};' +
       'try{ _walk(targetComp, items, [], stats, provided); applyTextByLayerRef(tplPlaceholders, provided, templateFolder, stats);}catch(e){ app.endUndoGroup(); return \"Ошибка: \"+e.toString(); }' +
       'app.endUndoGroup();' +
-      'try{' +
-      '  if(proj.activeItem && proj.activeItem instanceof CompItem){' +
-      '    proj.activeItem.layers.add(targetComp);' +
-      '  }' +
-      '}catch(eLayer){}' +
       'try{ targetComp.name=' + JSON.stringify(templateName) + '; }catch(eName){}' +
-      'try{ if(typeof targetComp.openInViewer===\"function\") targetComp.openInViewer(); }catch(e2){}' +
+      'var compToAddTo=activeCompBefore || (proj.activeItem && proj.activeItem instanceof CompItem ? proj.activeItem : null);' +
+      'if(compToAddTo){' +
+      '  compToAddTo.layers.add(targetComp);' +
+      '  try{ if(typeof compToAddTo.openInViewer===\"function\") compToAddTo.openInViewer(); }catch(_eView){}' +
+      '} else {' +
+      '  try{ if(typeof targetComp.openInViewer===\"function\") targetComp.openInViewer(); }catch(e2){}' +
+      '}' +
       'if(stats.found===0) return \"Не найдено плейсхолдеров (PH: в маркерах/комментарии/имени слоёв). Слоёв: \"+stats.layers+\", маркеров: \"+stats.markers+\", примеры: \"+stats.samples.join(\" | \");' +
       'var textMsg=\" | text attempts: \"+stats.textAttempts+\", applied: \"+stats.textApplied+\", missing layer: \"+stats.textMissing+\", no TextProp: \"+stats.textNoProp;' +
       'var logMsg=stats.logs.length?\" | log: \"+stats.logs.join(\" ; \"):\"\";' +
@@ -954,6 +981,37 @@
     }
 
     btn.addEventListener("click", buildFromSelection);
+
+    var packerBtn = document.getElementById("packerBtn");
+    if (packerBtn) {
+      packerBtn.addEventListener("click", function () {
+        var cs = getCSInterface();
+        if (!cs) {
+          setStatus("CSInterface недоступен. Запусти панель в After Effects.", "error");
+          return;
+        }
+        var path = (getRepoPathInput() || "").trim().replace(/\\/g, "/");
+        var repoRoot = path.replace(/\/?(projects|templates)\/?$/i, "") || path;
+        if (!repoRoot) {
+          setStatus("Укажи путь к репозиторию (папка projects) и нажми Load.", "error");
+          return;
+        }
+        var packerPath = repoRoot + "/packer/template_packer.jsx";
+        setStatus("Запуск упаковщика…", "info");
+        var jsx = "(function(){ var f = new File(" + JSON.stringify(packerPath) + "); if (!f.exists) return \"Файл не найден: \" + f.fsName; try { $.evalFile(f); return \"Упаковщик запущен.\"; } catch(e) { return \"Ошибка: \" + e.toString(); } })()";
+        cs.evalScript(jsx, function (result) {
+          if (result && typeof result === "string") {
+            if (result.indexOf("Ошибка") !== -1 || result.indexOf("не найден") !== -1) {
+              setStatus(result, "error");
+            } else {
+              setStatus(result, "success");
+            }
+          } else {
+            setStatus("Упаковщик запущен.", "success");
+          }
+        });
+      });
+    }
   }
 
   if (document.readyState === "loading") {

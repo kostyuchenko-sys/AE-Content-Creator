@@ -1,0 +1,1 @@
+Used fonts:TikTokDisplay-MediumHoeflerTextGeorgia-BoldArticulatCF-ExtraBoldAlteDIN1451MittelschriftArialMTTikTokSans-MediumCopied:HoeflerText -> Hoefler%20Text%20Ornaments.ttfGeorgia-Bold -> Georgia.ttfArialMT -> Arial.ttfMissing:TikTokDisplay-MediumArticulatCF-ExtraBoldAlteDIN1451MittelschriftTikTokSans-Medium
